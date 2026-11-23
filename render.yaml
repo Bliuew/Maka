@@ -1,0 +1,26 @@
+# One-click Render Blueprint. STAGING: age verification is the labelled test
+# simulator and sample data is seeded. Do not invite the public until a real
+# age-verification provider is connected (the server refuses NODE_ENV=production without one).
+services:
+  - type: web
+    name: maka-staging
+    runtime: docker
+    plan: starter            # a persistent disk requires a paid instance
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: staging
+      - key: MAKA_SECRET
+        generateValue: true
+      - key: SEED_ADMIN_PASSWORD
+        generateValue: true
+      - key: TRUST_PROXY
+        value: "1"
+      - key: INVITE_CODE          # private test server: sign-up needs this code (see Render dashboard → Environment)
+        generateValue: true
+      - key: DEFAULT_TERRITORY
+        value: CA
+    disk:
+      name: maka-data
+      mountPath: /data
+      sizeGB: 10
