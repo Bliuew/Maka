@@ -11,9 +11,11 @@ export const config = {
   env: env.NODE_ENV || 'development',
   port: Number(env.PORT || 8080),
   dataDir: path.resolve(env.MAKA_DATA_DIR || path.join(root, 'data')),
-  publicOrigin: env.PUBLIC_ORIGIN || env.RENDER_EXTERNAL_URL || (env.RAILWAY_PUBLIC_DOMAIN ? `https://${env.RAILWAY_PUBLIC_DOMAIN}` : `http://localhost:${env.PORT || 8080}`),
+  publicOrigin: env.PUBLIC_ORIGIN || env.RENDER_EXTERNAL_URL || (env.REPLIT_DOMAINS ? `https://${env.REPLIT_DOMAINS.split(',')[0]}` : null) || (env.RAILWAY_PUBLIC_DOMAIN ? `https://${env.RAILWAY_PUBLIC_DOMAIN}` : `http://localhost:${env.PORT || 8080}`),
   // Signing secret for media URLs and webhooks. Must be set in production.
-  secret: env.MAKA_SECRET || crypto.createHash('sha256').update('maka-dev-only-secret').digest('hex'),
+  secret: env.MAKA_SECRET || ((env.NODE_ENV || 'development') === 'development'
+    ? crypto.createHash('sha256').update('maka-dev-only-secret').digest('hex')
+    : crypto.randomBytes(32).toString('hex')), // hosted without MAKA_SECRET: random per start, never the public dev value
   sessionDays: 30,
   minimumAge: 19, // founder decision: strictly 19+, worldwide, no exceptions
 

@@ -24,8 +24,8 @@ execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size
 const server = spawn(process.execPath, ['--no-warnings=ExperimentalWarning', 'server/index.js'], { cwd: root, env: { ...process.env, PORT: String(port), MAKA_DATA_DIR: dataDir, PUBLIC_ORIGIN: base } });
 let log = '';
 server.stdout.on('data', (d) => { log += d; }); server.stderr.on('data', (d) => { log += d; });
-for (let i = 0; i < 120 && !log.includes('Mäka API'); i++) await new Promise((r) => setTimeout(r, 500));
-if (!log.includes('Mäka API')) { console.error(log); process.exit(1); }
+for (let i = 0; i < 120 && !log.includes('Seeded sample data'); i++) await new Promise((r) => setTimeout(r, 500));
+if (!log.includes('Seeded sample data')) { console.error(log); process.exit(1); }
 
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ ...devices['iPhone 13'], browserName: undefined, defaultBrowserType: undefined });

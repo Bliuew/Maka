@@ -67,3 +67,11 @@ The repo includes a `Dockerfile` (Node 22 + ffmpeg), a Render Blueprint (`render
 - **Railway:** New Project → Deploy from GitHub repo, then add a Volume mounted at `/data` and set `NODE_ENV=staging`, `MAKA_SECRET`, `INVITE_CODE` and `SEED_ADMIN_PASSWORD`.
 
 Staging runs the **labelled age-verification simulator**, so keep it invite-only (`INVITE_CODE`). The server refuses `NODE_ENV=production` until a real 19+ provider is connected.
+
+## Run on Replit (Core)
+
+1. In Replit choose **Create App → Import from GitHub** and pick `Bliuew/Maka`. The included `.replit` and `replit.nix` set up Node 22 and ffmpeg.
+2. Open **Secrets** and add `MAKA_SECRET` (any long random text), `INVITE_CODE` (the code testers type at sign-up) and `SEED_ADMIN_PASSWORD` (moderator password).
+3. Press **Run** to try it in the preview, then **Publish → Reserved VM**. You get a `https://<name>.replit.app` address.
+
+**Data persistence:** posts, accounts and videos are kept on local disk for now, so a republish can reset them. The next milestone moves them to Replit's PostgreSQL database and App Storage.

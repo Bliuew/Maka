@@ -1,0 +1,26 @@
+# Mäka on Replit (Core). Publish as a Reserved VM: video processing runs in the
+# background and realtime messaging keeps connections open, so the app must
+# not scale to zero or run as several copies.
+modules = ["nodejs-22"]
+run = "node --no-warnings=ExperimentalWarning server/index.js"
+hidden = ["data", "tests/screens"]
+
+[nix]
+channel = "stable-24_05"
+
+[env]
+PORT = "8080"
+NODE_ENV = "staging"
+TRUST_PROXY = "1"
+DEFAULT_TERRITORY = "CA"
+
+[deployment]
+deploymentTarget = "gce"
+run = ["node", "--no-warnings=ExperimentalWarning", "server/index.js"]
+
+[[ports]]
+localPort = 8080
+externalPort = 80
+
+[gitHubImport]
+requiredFiles = [".replit", "replit.nix"]
