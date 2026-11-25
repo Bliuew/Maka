@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { Text } from '../../../components/Text';
 import { Image } from 'expo-image';
 import { useLocalSearchParams } from 'expo-router';
-import { Banner, Button, Loading, P, Row, Screen, Sheet, Tag, useLoad } from '../../../components/ui';
+import { Banner, Button, Icon, Loading, P, Row, Screen, Sheet, Tag, useLoad } from '../../../components/ui';
 import { api, media } from '../../../lib/client';
 import { money } from '../../../core/format';
 import { useToast } from '../../../lib/toast';
@@ -35,7 +35,7 @@ export default function Storefront() {
       <View style={s.grid}>
         {data.products.map((p: any) => (
           <View key={p.id} style={s.tile} accessible={false}>
-            {media(p.imageUrl) ? <Image source={{ uri: media(p.imageUrl)! }} style={s.pic} contentFit="cover" accessibilityLabel={p.name} /> : <View style={s.pic} />}
+            {media(p.imageUrl) ? <Image source={{ uri: media(p.imageUrl)! }} style={s.pic} contentFit="cover" accessibilityLabel={p.name} /> : <View style={[s.pic, { alignItems: 'center', justifyContent: 'center' }]}><Icon name="bag-handle-outline" size={30} color={colors.faint} /></View>}
             <View style={{ padding: 10 }}>
               <Text style={s.name}>{p.name}</Text>
               <Text style={{ color: colors.muted, fontSize: 12 }} numberOfLines={2}>{p.description}</Text>

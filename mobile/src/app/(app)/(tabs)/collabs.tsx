@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Text } from '../../../components/Text';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { Banner, Button, Card, Choice, Empty, Field, ListItem, Loading, P, Pills, Screen, SectionTitle, Sheet, Tag, useLoad } from '../../../components/ui';
+import { Banner, Button, Card, Choice, Icon, Empty, Field, ListItem, Loading, P, Pills, Screen, SectionTitle, Sheet, Tag, useLoad } from '../../../components/ui';
 import { api, media } from '../../../lib/client';
 import { money } from '../../../core/format';
 import { useToast } from '../../../lib/toast';
@@ -44,7 +44,7 @@ export default function Collabs() {
       {data.items.length ? data.items.map((c: any) => (
         <Pressable key={c.id} style={s.offer} onPress={() => openCampaign(c.id)} accessibilityRole="button"
           accessibilityLabel={`${c.title}. ${c.category}. ${money(c.compensationCents, c.currency)}${c.myApplication ? '. Applied' : ''}`} testID="offer">
-          {media(c.imageUrl) ? <Image source={{ uri: media(c.imageUrl)! }} style={s.offerImg} contentFit="cover" /> : <View style={s.offerImg} />}
+          {media(c.imageUrl) ? <Image source={{ uri: media(c.imageUrl)! }} style={s.offerImg} contentFit="cover" /> : <View style={[s.offerImg, { alignItems: 'center', justifyContent: 'center' }]}><Icon name="briefcase-outline" size={30} color={colors.faint} /></View>}
           <View style={{ flex: 1 }}>
             <Text style={s.offerTitle}>{c.title}</Text>
             <Text style={{ color: colors.muted }} numberOfLines={2}>{c.brief}</Text>

@@ -372,3 +372,11 @@ test('Store readiness: privacy policy, terms, guidelines and account-deletion pa
     assert.ok(!/dislike/i.test(html.replace(/no public dislike counts/gi, '')), p);
   }
 });
+
+test('Only brand assets ship in web/assets (no sample photos or third-party imagery)', () => {
+  const allowed = new Set(['approved-logo.webp', 'app-icon-design.webp', 'icon-1024.png', 'icon-512.png', 'icon-192.png',
+    'icon-maskable-512.png', 'apple-touch-icon.png', 'favicon-64.png']);
+  const files = fs.readdirSync(new URL('../web/assets', import.meta.url));
+  assert.deepEqual(files.filter((f) => !allowed.has(f)), []);
+  assert.ok(!/asset:/.test(fs.readFileSync(new URL('../server/seed.js', import.meta.url), 'utf8')), 'seed data references no image assets');
+});

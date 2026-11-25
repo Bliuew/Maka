@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Text } from '../../../components/Text';
 import { Image } from 'expo-image';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { Banner, Button, Empty, Loading, P, Pills, Row, Screen, SectionTitle, Sheet, useLoad } from '../../../components/ui';
+import { Banner, Button, Empty, Icon, Loading, P, Pills, Row, Screen, SectionTitle, Sheet, useLoad } from '../../../components/ui';
 import { api, media } from '../../../lib/client';
 import { useToast } from '../../../lib/toast';
 import { colors } from '../../../lib/theme';
@@ -36,7 +36,7 @@ export default function Cinema() {
   const poster = (t: Title) => (
     <Pressable key={t.id} style={s.poster} onPress={() => openTitle(t.id)} accessibilityRole="button"
       accessibilityLabel={`${t.name}. ${t.genres.join(', ')}. ${t.availability.playable ? 'Free with ads' : t.isPlaceholder ? 'Placeholder, cannot play' : 'Unavailable'}`} testID="poster">
-      {media(t.posterUrl) ? <Image source={{ uri: media(t.posterUrl)! }} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
+      {media(t.posterUrl) ? <Image source={{ uri: media(t.posterUrl)! }} style={StyleSheet.absoluteFill} contentFit="cover" /> : <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}><Icon name="film-outline" size={34} color={colors.faint} /></View>}
       <View style={s.posterTxt}><Text style={s.posterName}>{t.name}</Text>
         <Text style={s.posterSub}>{t.genres.join(' · ')} · {t.availability.playable ? 'Free with ads' : t.isPlaceholder ? 'Placeholder' : 'Unavailable'}</Text></View>
     </Pressable>
@@ -49,7 +49,7 @@ export default function Cinema() {
       {data.licensedCount === 0 ? <Banner>No films are licensed yet. The titles below are fictional placeholders to show how Cinema works — none of them can play.</Banner> : null}
       {hero && !f.list ? (
         <Pressable style={s.hero} onPress={() => openTitle(hero.id)} accessibilityRole="button" accessibilityLabel={`Featured: ${hero.name}. View details`}>
-          {media(hero.posterUrl) ? <Image source={{ uri: media(hero.posterUrl)! }} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
+          {media(hero.posterUrl) ? <Image source={{ uri: media(hero.posterUrl)! }} style={StyleSheet.absoluteFill} contentFit="cover" /> : <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}><Icon name="film-outline" size={44} color={colors.faint} /></View>}
           <View style={s.heroTxt}><Text style={s.badge}>{hero.isPlaceholder ? 'Fictional placeholder' : 'Featured'}</Text><Text style={s.heroName}>{hero.name}</Text><Text style={s.posterSub}>{hero.genres.join(' · ')}</Text></View>
         </Pressable>
       ) : null}

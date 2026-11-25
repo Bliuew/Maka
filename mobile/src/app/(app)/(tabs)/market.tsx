@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Text } from '../../../components/Text';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { Button, Card, Empty, Loading, P, Pills, Screen, SearchBox, Tag, useLoad } from '../../../components/ui';
+import { Button, Card, Empty, Loading, P, Pills, Screen, SearchBox, Tag, Icon, useLoad } from '../../../components/ui';
 import { api, media } from '../../../lib/client';
 import { colors } from '../../../lib/theme';
 
@@ -23,7 +23,7 @@ export default function Market() {
           <View style={s.grid}>
             {data.items.length ? data.items.map((b: any) => (
               <Pressable key={b.id} style={s.tile} onPress={() => router.push(`/market/${b.id}`)} accessibilityRole="button" accessibilityLabel={`${b.name}, ${b.category}, ${b.productCount} products${b.isSample ? ', sample store' : ''}`} testID="store">
-                {media(b.coverUrl) ? <Image source={{ uri: media(b.coverUrl)! }} style={s.pic} contentFit="cover" /> : <View style={s.pic} />}
+                {media(b.coverUrl) ? <Image source={{ uri: media(b.coverUrl)! }} style={s.pic} contentFit="cover" /> : <View style={[s.pic, { alignItems: 'center', justifyContent: 'center' }]}><Icon name="storefront-outline" size={30} color={colors.faint} /></View>}
                 <View style={{ padding: 10 }}>
                   <Text style={s.name}>{b.name}</Text>
                   <Text style={{ color: colors.muted, fontSize: 12 }}>{b.category} · {b.productCount} products</Text>
