@@ -360,6 +360,12 @@ CREATE TABLE IF NOT EXISTS earnings (
 -- Live streams can be reported (added after launch).
 ALTER TABLE reports DROP CONSTRAINT IF EXISTS reports_target_type_check;
 ALTER TABLE reports ADD CONSTRAINT reports_target_type_check CHECK (target_type IN ('post','comment','user','message','live'));
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS stripe_account TEXT;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS charges_enabled INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS checkout_session TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS checkout_url TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS checkout_expires BIGINT;
+CREATE TABLE IF NOT EXISTS payment_events (id TEXT PRIMARY KEY, type TEXT NOT NULL, created_at BIGINT NOT NULL);
 `;
 
 /** Rewrite `?` placeholders (outside string literals) to `$1..$n`. */

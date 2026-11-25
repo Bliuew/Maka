@@ -2,10 +2,11 @@ import http from 'node:http';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { createMailer } from './mail.js';
+import { createPayments } from './payments.js';
 import { config } from './config.js';
 import { openDb, helpers, id, now } from './db.js';
 import { createStorage } from './storage.js';
-import { Router, send, fail, readJson, securityHeaders, RateLimiter, sendFile, clientIp, HttpError } from './http.js';
+import { Router, send, fail, readJson, readBody, securityHeaders, RateLimiter, sendFile, clientIp, HttpError } from './http.js';
 import { signMediaUrl, verifyMediaSig, mediaKey } from './media.js';
 import { loadLexicon } from './safety.js';
 import { registerAuth } from './routes/auth.js';
@@ -21,7 +22,7 @@ const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
 /** Map an array through an async function, in order. */
 export const mapAsync = (list, fn) => Promise.all(list.map(fn));
 
-export async function createApp({ databaseUrl, schema, storage, mailer } = {}) {
+export async function createApp({ databaseUrl, schema, storage, mailer, payments } = {}) {
   const db = await openDb({ url: databaseUrl, schema });
   const q = helpers(db);
   storage = storage || await createStorage();
@@ -42,7 +43,7 @@ export async function createApp({ databaseUrl, schema, storage, mailer } = {}) {
 
   // ---- shared helpers used by route modules -------------------------------
   const ctx = {
-    db, q, storage, limiter, events, config, mapAsync, mail: mailer || createMailer(),
+    db, q, storage, limiter, events, config, mapAsync, mail: mailer || createMailer(), payments: payments === undefined ? createPayments() : payments,
     async audit(actorId, action, targetType, targetId, details = {}) {
       await q.run('INSERT INTO audit_log (actor_id, action, target_type, target_id, details, created_at) VALUES (?,?,?,?,?,?)',
         actorId, action, targetType, targetId, JSON.stringify(details), now());
@@ -171,7 +172,7 @@ export async function createApp({ databaseUrl, schema, storage, mailer } = {}) {
       storage: storage.name === 's3' ? 'object storage (S3-compatible)' : 'local disk (development only)',
       integrations: {
         ageVerification: config.ageProvider === 'test' ? 'TEST SIMULATOR (not real verification)' : config.ageProvider,
-        payments: config.paymentsProvider || 'not configured',
+        payments: ctx.payments?.provider || 'not configured',
         push: config.pushProvider || 'not configured',
         live: config.liveProvider || 'not configured',
         mediaScanning: config.mediaScanner || 'not configured',
@@ -207,7 +208,7 @@ export async function createApp({ databaseUrl, schema, storage, mailer } = {}) {
       const user = await authenticate(req);
       gate(opts.auth || 'member', user);
       if (user && req.method !== 'GET' && req.method !== 'HEAD') limiter.check('user:' + user.id, 120, 120);
-      const result = await handler({ req, res, params: match.params, query: url.searchParams, user, body: () => readJson(req) });
+      const result = await handler({ req, res, params: match.params, query: url.searchParams, user, body: () => readJson(req), raw: () => readBody(req, 1024 * 1024) });
       if (result !== undefined && !res.headersSent) send(res, 200, result);
     } catch (e) {
       if (e instanceof HttpError) return send(res, e.status, { error: e.code, message: e.message, ...(e.extra || {}) });

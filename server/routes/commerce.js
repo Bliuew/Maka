@@ -210,15 +210,106 @@ export function registerCommerce(r, ctx) {
   r.post('/api/orders/:id/checkout', {}, async ({ user, params }) => {
     const o = (await q.get('SELECT * FROM orders WHERE id=? AND buyer_id=?', params.id, user.id)) || fail(404, 'order_not_found');
     if (o.status !== 'awaiting_payment') fail(409, 'invalid_state');
-    // Real flow: create a provider PaymentIntent / Checkout Session and return its client secret.
-    // Card data is entered in the provider's UI and never touches Mäka servers.
-    if (!config.paymentsProvider) fail(503, 'payments_not_configured', 'Checkout is not live yet. Your order is saved; no payment has been taken.');
-    fail(501, 'payments_adapter_missing');
+    // Card data is entered on the provider's hosted page and never touches Mäka servers.
+    const pay = ctx.payments;
+    if (!pay) fail(503, 'payments_not_configured', 'Checkout is not live yet. Your order is saved; no payment has been taken.');
+    if (pay.missing) fail(501, 'payments_adapter_missing');
+    if (o.checkout_url && o.checkout_expires > now() + 5 * 6e4) return { url: o.checkout_url };
+    const biz = await q.get('SELECT * FROM businesses WHERE id=?', o.business_id);
+    if (!biz.stripe_account || !biz.charges_enabled) fail(409, 'store_not_accepting_payments', `${biz.name} isn’t set up to take payments yet. Your order is saved; no payment has been taken.`);
+    const items = await q.all('SELECT oi.qty, oi.unit_cents, p.name, p.stock FROM order_items oi JOIN products p ON p.id=oi.product_id WHERE oi.order_id=?', o.id);
+    for (const it of items) if (it.stock < it.qty) fail(409, 'out_of_stock', `${it.name} sold out after you ordered. Cancel and order again.`);
+    const fee = Math.floor(o.total_cents * pay.feeBps / 10000);
+    const expires = Math.floor(now() / 1000) + 60 * 60;
+    const origin = config.publicOrigin;
+    const session = await pay.createCheckout({
+      mode: 'payment', client_reference_id: o.id + '-' + expires, customer_email: user.email,
+      line_items: items.map((it) => ({ quantity: it.qty, price_data: { currency: o.currency.toLowerCase(), unit_amount: it.unit_cents, product_data: { name: it.name } } })),
+      success_url: `${origin}/order.html?status=paid&order=${o.id}`, cancel_url: `${origin}/order.html?status=cancelled&order=${o.id}`,
+      expires_at: expires, metadata: { order_id: o.id },
+      payment_intent_data: { transfer_data: { destination: biz.stripe_account }, application_fee_amount: fee || undefined, metadata: { order_id: o.id } },
+      shipping_address_collection: { allowed_countries: pay.shipCountries },
+      automatic_tax: pay.automaticTax ? { enabled: true, liability: { type: 'account', account: biz.stripe_account } } : undefined,
+    });
+    await q.run('UPDATE orders SET checkout_session=?, checkout_url=?, checkout_expires=?, updated_at=? WHERE id=?', session.id, session.url, expires * 1000, now(), o.id);
+    return { url: session.url };
+  });
+
+  // Business payouts: each verified business connects its own Stripe account.
+  r.get('/api/businesses/:id/payments', {}, async ({ user, params }) => {
+    const biz = await ownBusiness(params.id, user);
+    const pay = ctx.payments;
+    if (pay && !pay.missing && biz.stripe_account && !biz.charges_enabled) {
+      const acct = await pay.getAccount(biz.stripe_account).catch(() => null);
+      if (acct?.charges_enabled) { await q.run('UPDATE businesses SET charges_enabled=1 WHERE id=?', biz.id); biz.charges_enabled = 1; }
+    }
+    return { configured: !!pay && !pay.missing, connected: !!biz.stripe_account, acceptingPayments: !!biz.charges_enabled };
+  });
+  r.post('/api/businesses/:id/payments/onboard', {}, async ({ user, params }) => {
+    const biz = await ownBusiness(params.id, user);
+    if (biz.verification !== 'verified') fail(403, 'business_not_verified', 'Your business needs to be verified first.');
+    const pay = ctx.payments;
+    if (!pay) fail(503, 'payments_not_configured', 'Payments aren’t live on Mäka yet.');
+    if (pay.missing) fail(501, 'payments_adapter_missing');
+    let account = biz.stripe_account;
+    if (!account) {
+      account = (await pay.createAccount({ email: user.email, businessId: biz.id })).id;
+      await q.run('UPDATE businesses SET stripe_account=? WHERE id=?', account, biz.id);
+      await ctx.audit(user.id, 'payments_connect', 'business', biz.id, {});
+    }
+    const back = `${config.publicOrigin}/order.html?status=onboarded`;
+    const link = await pay.accountLink({ account, refreshUrl: `${config.publicOrigin}/order.html?status=onboarding_expired`, returnUrl: back });
+    return { url: link.url };
+  });
+
+  // Provider webhook: the only way an order becomes paid, refunded or disputed.
+  r.post('/api/payments/webhook', { auth: 'public' }, async ({ req, raw }) => {
+    const pay = ctx.payments;
+    if (!pay || pay.missing) fail(503, 'payments_not_configured');
+    const buf = await raw();
+    const ev = pay.verifyWebhook(buf, req.headers['stripe-signature']);
+    if (!ev) fail(400, 'invalid_signature');
+    const obj = ev.data?.object || {};
+    const notices = [], refunds = [];
+    // Recording the event and applying it commit together, so a failure is retried by the provider.
+    const duplicate = await q.tx(async () => {
+    const fresh = await q.run('INSERT INTO payment_events (id,type,created_at) VALUES (?,?,?) ON CONFLICT DO NOTHING', ev.id, ev.type, now());
+    if (fresh.changes === 0) return true;
+    if ((ev.type === 'checkout.session.completed' || ev.type === 'checkout.session.async_payment_succeeded') && obj.payment_status === 'paid') {
+      const oid = obj.metadata?.order_id;
+      const o = oid && await q.get('SELECT * FROM orders WHERE id=?', oid);
+      if (o && o.status === 'cancelled' && !o.payment_ref) {
+        // Paid on a page opened before the order was cancelled: refund in full, never keep the money.
+        await q.run('UPDATE orders SET payment_ref=?, updated_at=? WHERE id=?', obj.payment_intent, now(), o.id);
+        refunds.push(obj.payment_intent);
+      } else if (o && o.status === 'awaiting_payment') {
+        if (o.total_cents !== obj.amount_subtotal) console.error(`order ${o.id}: paid subtotal ${obj.amount_subtotal} differs from ${o.total_cents}`);
+        await q.run("UPDATE orders SET status='paid', payment_ref=?, updated_at=? WHERE id=?", obj.payment_intent, now(), o.id);
+        for (const it of await q.all('SELECT product_id, qty FROM order_items WHERE order_id=?', o.id))
+          await q.run('UPDATE products SET stock=GREATEST(stock-?,0) WHERE id=?', it.qty, it.product_id);
+        const biz = await q.get('SELECT * FROM businesses WHERE id=?', o.business_id);
+        notices.push([o.buyer_id, o.id, `Payment received for your ${biz.name} order.`], [biz.owner_id, o.id, `New paid order for ${biz.name}.`]);
+      }
+    } else if (ev.type === 'charge.refunded' && obj.refunded) {
+      await q.run("UPDATE orders SET status='refunded', updated_at=? WHERE payment_ref=?", now(), obj.payment_intent);
+    } else if (ev.type === 'charge.dispute.created') {
+      await q.run("UPDATE orders SET status='disputed', updated_at=? WHERE payment_ref=?", now(), obj.payment_intent);
+    } else if (ev.type === 'account.updated') {
+      await q.run('UPDATE businesses SET charges_enabled=? WHERE stripe_account=?', obj.charges_enabled ? 1 : 0, obj.id);
+    }
+    return false;
+    });
+    if (duplicate) return { received: true, duplicate: true };
+    for (const pi of refunds) await pay.refund(pi);
+    for (const [uid, oid, text] of notices) await ctx.notify(uid, 'order_paid', null, 'order', oid, text);
+    return { received: true };
   });
   r.post('/api/orders/:id/cancel', {}, async ({ user, params }) => {
     const o = (await q.get('SELECT * FROM orders WHERE id=? AND buyer_id=?', params.id, user.id)) || fail(404, 'order_not_found');
     if (o.status !== 'awaiting_payment') fail(409, 'invalid_state', 'Paid orders need a refund request instead.');
-    await q.run("UPDATE orders SET status='cancelled', updated_at=? WHERE id=?", now(), o.id);
+    // Close any open payment page first so a cancelled order can't be paid afterwards.
+    if (o.checkout_session && o.checkout_expires > now() && ctx.payments?.expireCheckout) await ctx.payments.expireCheckout(o.checkout_session);
+    await q.run("UPDATE orders SET status='cancelled', checkout_url=NULL, updated_at=? WHERE id=?", now(), o.id);
     return { status: 'cancelled' };
   });
   r.post('/api/orders/:id/refund-request', {}, async ({ user, params }) => {

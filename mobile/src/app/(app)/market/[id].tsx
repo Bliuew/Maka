@@ -3,6 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { Text } from '../../../components/Text';
 import { Image } from 'expo-image';
 import { useLocalSearchParams } from 'expo-router';
+import * as Linking from 'expo-linking';
 import { Banner, Button, Icon, Loading, P, Row, Screen, Sheet, Tag, useLoad } from '../../../components/ui';
 import { api, media } from '../../../lib/client';
 import { money } from '../../../core/format';
@@ -26,8 +27,11 @@ export default function Storefront() {
     try {
       const o = await api.post('/api/orders', { businessId: id, items: Object.entries(basket).map(([productId, qty]) => ({ productId, qty })) });
       cart.clear(id);
-      try { await api.post(`/api/orders/${o.orderId}/checkout`); }
-      catch (e: any) { setResult({ order: o, message: e.message }); }
+      try {
+        const { url } = await api.post(`/api/orders/${o.orderId}/checkout`);
+        setResult({ order: o, message: 'Finish paying on Stripe’s secure page. Your order shows as paid once the payment is confirmed.' });
+        await Linking.openURL(url);
+      } catch (e: any) { setResult({ order: o, message: e.message }); }
     } catch (e) { toast.error(e); }
   };
   return (

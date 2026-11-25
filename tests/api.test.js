@@ -515,3 +515,84 @@ test('mail adapters call the provider API with the key', async () => {
   assert.equal(seen[1].url, '/email'); assert.equal(seen[1].headers['x-postmark-server-token'], 'pk'); assert.equal(seen[1].body.To, 'a@ex.com');
   await assert.rejects(createMailer({ NODE_ENV: 'production' }).send(msg), /not configured/);
 });
+
+test('Stripe: business onboarding, hosted checkout, signed webhooks mark orders paid, refunds a cancelled order', async () => {
+  resetLimits();
+  const crypto = await import('node:crypto');
+  const http = await import('node:http');
+  const { createPayments } = await import('../server/payments.js');
+  const calls = [];
+  const fake = http.createServer((req, res) => {
+    let b = ''; req.on('data', (d) => { b += d; });
+    req.on('end', () => {
+      const p = new URLSearchParams(b);
+      calls.push({ method: req.method, url: req.url, auth: req.headers.authorization, idem: req.headers['idempotency-key'], p });
+      const reply = (o) => { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(o)); };
+      if (req.url === '/v1/accounts') return reply({ id: 'acct_test1' });
+      if (req.url === '/v1/account_links') return reply({ url: 'https://connect.stripe.test/onboard' });
+      if (req.url === '/v1/accounts/acct_test1') return reply({ id: 'acct_test1', charges_enabled: false });
+      if (req.url === '/v1/checkout/sessions') return reply({ id: 'cs_' + calls.length, url: 'https://checkout.stripe.test/' + calls.length });
+      if (req.url.endsWith('/expire')) return reply({});
+      if (req.url === '/v1/refunds') return reply({ id: 're_1' });
+      res.statusCode = 404; reply({ error: { message: 'unknown' } });
+    });
+  });
+  await new Promise((r) => fake.listen(0, r));
+  const saved = app.ctx.payments;
+  app.ctx.payments = createPayments({ PAYMENTS_PROVIDER: 'stripe', STRIPE_SECRET_KEY: 'sk_test_x', STRIPE_WEBHOOK_SECRET: 'whsec_x', STRIPE_API_BASE: `http://localhost:${fake.address().port}`, PLATFORM_FEE_BPS: '500' });
+  const hook = async (event, { secret = 'whsec_x', age = 0 } = {}) => {
+    const raw = JSON.stringify(event), t = Math.floor(Date.now() / 1000) - age;
+    const sig = crypto.createHmac('sha256', secret).update(`${t}.${raw}`).digest('hex');
+    const res = await fetch(base + '/api/payments/webhook', { method: 'POST', headers: { 'content-type': 'application/json', 'stripe-signature': `t=${t},v1=${sig}` }, body: raw });
+    return { status: res.status, data: await res.json() };
+  };
+  try {
+    const owner = await adult(), buyer = await adult(), admin = await adult();
+    await app.q.run("UPDATE users SET role='admin' WHERE id=?", admin.id);
+    const biz = (await call('POST', '/api/businesses', owner.token, { name: 'Hive Goods', category: 'Home', registrationRef: 'R9' })).data;
+    assert.equal((await call('POST', `/api/businesses/${biz.id}/payments/onboard`, owner.token)).data.error, 'business_not_verified');
+    await call('POST', `/api/admin/businesses/${biz.id}/verify`, admin.token, { decision: 'verified' });
+    assert.equal((await call('POST', `/api/businesses/${biz.id}/payments/onboard`, buyer.token)).status, 404, 'only the owner can connect payouts');
+    const ob = await call('POST', `/api/businesses/${biz.id}/payments/onboard`, owner.token);
+    assert.equal(ob.data.url, 'https://connect.stripe.test/onboard');
+    assert.equal(calls[0].auth, 'Bearer sk_test_x');
+    const pr = (await call('POST', `/api/businesses/${biz.id}/products`, owner.token, { name: 'Beeswax candle', priceCents: 2000, stock: 5 })).data;
+    const order = (await call('POST', '/api/orders', buyer.token, { businessId: biz.id, items: [{ productId: pr.id, qty: 2 }] })).data;
+    assert.equal((await call('POST', `/api/orders/${order.orderId}/checkout`, buyer.token)).data.error, 'store_not_accepting_payments', 'no checkout until the store finished onboarding');
+    // Forged, stale and valid account.updated events
+    const acctEv = { id: 'evt_a1', type: 'account.updated', data: { object: { id: 'acct_test1', charges_enabled: true } } };
+    assert.equal((await hook(acctEv, { secret: 'wrong' })).status, 400, 'forged signature refused');
+    assert.equal((await hook(acctEv, { age: 3600 })).status, 400, 'stale signature refused');
+    assert.equal((await hook(acctEv)).status, 200);
+    assert.equal((await call('GET', `/api/businesses/${biz.id}/payments`, owner.token)).data.acceptingPayments, true);
+    const co = await call('POST', `/api/orders/${order.orderId}/checkout`, buyer.token);
+    assert.match(co.data.url, /^https:\/\/checkout\.stripe\.test\//);
+    const cs = calls.find((c) => c.url === '/v1/checkout/sessions').p;
+    assert.equal(cs.get('line_items[0][price_data][unit_amount]'), '2000', 'server prices sent to Stripe');
+    assert.equal(cs.get('line_items[0][quantity]'), '2');
+    assert.equal(cs.get('payment_intent_data[transfer_data][destination]'), 'acct_test1', 'money goes to the business');
+    assert.equal(cs.get('payment_intent_data[application_fee_amount]'), '200', '5% platform fee from PLATFORM_FEE_BPS');
+    assert.ok(!cs.has('card') && !cs.toString().includes('card_number'));
+    assert.equal((await call('POST', `/api/orders/${order.orderId}/checkout`, buyer.token)).data.url, co.data.url, 'reuses the open checkout page');
+    const paid = { id: 'evt_p1', type: 'checkout.session.completed', data: { object: { payment_status: 'paid', payment_intent: 'pi_1', amount_subtotal: 4000, metadata: { order_id: order.orderId } } } };
+    assert.equal((await hook(paid)).status, 200);
+    assert.equal((await hook(paid)).data.duplicate, true, 'replayed event ignored');
+    const mine = (await call('GET', '/api/me/orders', buyer.token)).data.find((x) => x.id === order.orderId);
+    assert.equal(mine.status, 'paid');
+    assert.equal((await app.q.get('SELECT stock FROM products WHERE id=?', pr.id)).stock, 3, 'stock decremented once');
+    await hook({ id: 'evt_r1', type: 'charge.refunded', data: { object: { refunded: true, payment_intent: 'pi_1' } } });
+    assert.equal((await call('GET', '/api/me/orders', buyer.token)).data.find((x) => x.id === order.orderId).status, 'refunded');
+    // Cancel with an open payment page: page is expired; a late payment is refunded automatically.
+    const o2 = (await call('POST', '/api/orders', buyer.token, { businessId: biz.id, items: [{ productId: pr.id, qty: 1 }] })).data;
+    await call('POST', `/api/orders/${o2.orderId}/checkout`, buyer.token);
+    await call('POST', `/api/orders/${o2.orderId}/cancel`, buyer.token);
+    assert.ok(calls.some((c) => c.url.endsWith('/expire')), 'open checkout page closed on cancel');
+    await hook({ id: 'evt_p2', type: 'checkout.session.completed', data: { object: { payment_status: 'paid', payment_intent: 'pi_2', amount_subtotal: 2000, metadata: { order_id: o2.orderId } } } });
+    const rf = calls.find((c) => c.url === '/v1/refunds');
+    assert.equal(rf.p.get('payment_intent'), 'pi_2'); assert.equal(rf.p.get('reverse_transfer'), 'true');
+    assert.equal((await call('GET', '/api/me/orders', buyer.token)).data.find((x) => x.id === o2.orderId).status, 'cancelled');
+  } finally {
+    app.ctx.payments = saved;
+    fake.close();
+  }
+});

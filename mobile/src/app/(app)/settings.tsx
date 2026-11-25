@@ -72,7 +72,12 @@ export default function Settings() {
 
       <SectionTitle>Orders</SectionTitle>
       {data.orders.length ? data.orders.map((o) => <ListItem key={o.id} title={`${o.business} · ${o.status}`} subtitle={money(o.totalCents, o.currency)}
-        right={o.status === 'awaiting_payment' ? <Button title="Cancel" small variant="secondary" onPress={act(async () => { await api.post(`/api/orders/${o.id}/cancel`); toast.show('Order cancelled'); reload(); })} /> : undefined} />) : <Empty>No orders.</Empty>}
+        right={o.status === 'awaiting_payment' ? (
+          <Row>
+            <Button title="Pay" small onPress={act(async () => { const r = await api.post(`/api/orders/${o.id}/checkout`); await Linking.openURL(r.url); })} />
+            <Button title="Cancel" small variant="secondary" onPress={act(async () => { await api.post(`/api/orders/${o.id}/cancel`); toast.show('Order cancelled'); reload(); })} />
+          </Row>
+        ) : undefined} />) : <Empty>No orders.</Empty>}
 
       <SectionTitle>Your data & legal</SectionTitle>
       <Row wrap>

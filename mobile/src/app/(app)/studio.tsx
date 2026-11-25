@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View } from 'react-native';
 import { Text } from '../../components/Text';
 import { useRouter } from 'expo-router';
+import * as Linking from 'expo-linking';
 import { Avatar, Banner, Button, Card, Empty, Field, ListItem, Loading, Metrics, P, Row, Screen, SectionTitle, Sheet, Tag, useLoad } from '../../components/ui';
 import { api } from '../../lib/client';
 import { count, money } from '../../core/format';
@@ -63,6 +64,9 @@ export default function Studio() {
               <Button title="Add product" small variant="secondary" onPress={() => open({ kind: 'product', biz: b.id })} />
               <Button title="Applicants" small variant="secondary" onPress={act(async () => open({ kind: 'applicants', biz: b.id, list: await api.get(`/api/businesses/${b.id}/applications`) }))} />
             </Row>
+          ) : null}
+          {b.verification === 'verified' ? (
+            <Payments biz={b.id} />
           ) : <P muted>Awaiting verification by the Mäka team.</P>}
         </Card>
       ))}
@@ -120,5 +124,24 @@ export default function Studio() {
         <View style={{ height: 12 }} />
       </Sheet>
     </Screen>
+  );
+}
+
+// Each verified business connects its own Stripe account; buyers pay the business directly.
+function Payments({ biz }: { biz: string }) {
+  const toast = useToast();
+  const { data, reload } = useLoad(() => api.get(`/api/businesses/${biz}/payments`), [biz]);
+  if (!data) return null;
+  if (!data.configured) return <P muted>Payments aren’t live on Mäka yet. Orders are saved and no payment is taken.</P>;
+  if (data.acceptingPayments) return <Row style={{ marginTop: 10 }}><Tag tone="green">Accepting payments</Tag></Row>;
+  return (
+    <View style={{ marginTop: 10 }}>
+      <P muted>{data.connected ? 'Stripe is still checking your details, or some are missing.' : 'Connect a Stripe account to get paid for orders. Stripe verifies your identity and bank details; Mäka never sees them.'}</P>
+      <Row wrap>
+        <Button title={data.connected ? 'Continue setup' : 'Accept payments'} small icon="card-outline" testID="accept-payments"
+          onPress={async () => { try { const r = await api.post(`/api/businesses/${biz}/payments/onboard`); await Linking.openURL(r.url); } catch (e) { toast.error(e); } }} />
+        {data.connected ? <Button title="Check status" small variant="secondary" onPress={reload} /> : null}
+      </Row>
+    </View>
   );
 }

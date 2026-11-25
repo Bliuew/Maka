@@ -30,6 +30,12 @@ services:
         generateValue: true
       - key: DEFAULT_TERRITORY
         value: CA
+      - key: PAYMENTS_PROVIDER    # stripe (leave empty until your Stripe account is ready)
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
       - key: MAIL_PROVIDER        # resend or postmark (password-reset email)
         sync: false
       - key: MAIL_API_KEY
