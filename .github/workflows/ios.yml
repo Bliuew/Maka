@@ -46,6 +46,13 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: mobile/package-lock.json
+      - name: Use the newest Xcode (this SDK needs Swift 6.2 / Xcode 26 or later)
+        run: |
+          XC=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          echo "Selecting $XC"
+          sudo xcode-select -s "$XC/Contents/Developer"
+          xcodebuild -version
+          swift --version
       - run: npm ci
       - name: Generate the native iOS project (Expo prebuild)
         run: npx expo prebuild --platform ios --no-install
