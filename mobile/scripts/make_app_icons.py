@@ -3,6 +3,7 @@
 Only scaling and padding are applied — the bee artwork itself is never redrawn.
 Run from the repository root:  python3 mobile/scripts/make_app_icons.py
 """
+import shutil
 from PIL import Image
 
 SRC = 'web/assets/icon-1024.png'
@@ -11,8 +12,8 @@ CREAM = (253, 246, 233)  # the icon's own background colour
 src = Image.open(SRC).convert('RGB')
 assert src.size == (1024, 1024)
 
-# iOS / store icon: the approved icon as-is (opaque, square — required by Apple).
-src.save('mobile/assets/icon.png')
+# iOS / store icon: the approved icon file itself, copied byte-for-byte (opaque, square — required by Apple).
+shutil.copyfile(SRC, 'mobile/assets/icon.png')
 
 # Android adaptive icon foreground: launchers crop to a circle/squircle inside the
 # central 66% circle. The bee spans ~76% x 51% of the icon, so at 72% its corners stay
