@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "Mäka",
+    "slug": "maka",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "output": "single",
+      "name": "Mäka",
+      "themeColor": "#0b0b0d",
+      "backgroundColor": "#0b0b0d"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-video",
+      "expo-secure-store",
+      "expo-splash-screen",
+      "expo-image",
+      "expo-sharing"
+    ],
+    "scheme": "maka",
+    "backgroundColor": "#0b0b0d"
+  }
+}
