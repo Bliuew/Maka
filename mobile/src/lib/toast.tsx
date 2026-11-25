@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useMemo, useRef, useStat
 import { AccessibilityInfo, StyleSheet, View } from 'react-native';
 import { Text } from '../components/Text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, radius } from './theme';
+import { colors } from './theme';
 
 type Toast = { show: (msg: string, isError?: boolean) => void; error: (e: unknown) => void };
 const Ctx = createContext<Toast | null>(null);

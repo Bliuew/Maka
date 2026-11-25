@@ -240,7 +240,8 @@ try {
     await tid('si-pass').fill('dev-admin-password');
     await tid('si-submit').click();
     await tid('feed').waitFor({ timeout: 20000 });
-    await page.getByRole('button', { name: 'Trust and Safety' }).click();
+    await tid('open-profile').click();
+    await page.getByRole('button', { name: 'Trust and Safety' }).filter({ visible: true }).first().click();
     await page.getByText('Report queue (highest risk first)').waitFor();
     await page.getByText(/bullying · user/).first().waitFor();
     await shot('admin');

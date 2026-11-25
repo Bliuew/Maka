@@ -265,7 +265,7 @@ export function Metrics({ items }: { items: [string, string][] }) {
 }
 
 /** Bottom sheet with a grabber and an accessible close button. */
-export function Sheet({ visible, title, onClose, children }: { visible: boolean; title: string; onClose: () => void; children: React.ReactNode }) {
+export function Sheet({ visible, title, onClose, children, footer }: { visible: boolean; title: string; onClose: () => void; children: React.ReactNode; footer?: React.ReactNode }) {
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} accessibilityViewIsModal>
@@ -280,6 +280,7 @@ export function Sheet({ visible, title, onClose, children }: { visible: boolean;
             </Pressable>
           </View>
           <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>{children}</ScrollView>
+          {footer ? <View style={styles.sheetFooter}>{footer}</View> : null}
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -340,6 +341,7 @@ export const styles = StyleSheet.create({
   metricN: { fontFamily: font.bold, fontSize: 19, color: colors.text, letterSpacing: -0.3 },
   shade: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
   sheet: { backgroundColor: colors.pane, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 16, paddingTop: 8, maxHeight: '90%' },
+  sheetFooter: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line, marginHorizontal: -16, paddingHorizontal: 12, paddingTop: 10 },
   grabber: { alignSelf: 'center', width: 36, height: 5, borderRadius: 3, backgroundColor: colors.lineStrong, marginBottom: 8 },
   sheetHead: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, minHeight: 40 },
   closeBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.pane2, alignItems: 'center', justifyContent: 'center' },

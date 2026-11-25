@@ -1,14 +1,15 @@
 // Post interactions shared by the feed, single-post view and profiles:
 // like, save, follow, share, comments, report / report-and-block, mute, block.
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, Share, View } from 'react-native';
-import { Text } from './Text';
+import { Alert, Pressable, Share, StyleSheet, View } from 'react-native';
+import { Text, TextInput } from './Text';
 import { useRouter } from 'expo-router';
 import { api } from '../lib/client';
 import { useSession } from '../lib/session';
 import { useToast } from '../lib/toast';
 import { ago } from '../core/format';
-import { Avatar, Banner, Button, Check, Choice, Empty, Field, P, Row, Sheet, Tag, styles } from './ui';
+import { colors } from '../lib/theme';
+import { Avatar, Button, Check, Choice, Empty, Field, Icon, P, Sheet, Tag } from './ui';
 
 export type Post = any;
 
@@ -35,6 +36,7 @@ export function usePostActions(onChange: (p: Post) => void) {
 // ---------- comments ----------
 export function CommentsSheet({ postId, visible, onClose, onCountChange }: { postId: string | null; visible: boolean; onClose: () => void; onCountChange?: () => void }) {
   const toast = useToast();
+  const { me } = useSession();
   const [data, setData] = useState<any>(null);
   const [text, setText] = useState('');
   const [reportId, setReportId] = useState<string | null>(null);
@@ -56,30 +58,40 @@ export function CommentsSheet({ postId, visible, onClose, onCountChange }: { pos
     } catch (e) { setText((cur) => cur || body); toast.error(e); }
   };
   const del = async (id: string) => { try { await api.del('/api/comments/' + id); await load(); onCountChange?.(); } catch (e) { toast.error(e); } };
+  const n = data?.comments.length ?? 0;
+  const footer = data?.allowComments ? (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+      <Avatar user={me} size={34} />
+      <TextInput value={text} onChangeText={setText} placeholder="Add a comment…" placeholderTextColor={colors.faint} maxLength={500} multiline
+        accessibilityLabel="Add a comment" testID="comment-input"
+        style={{ flex: 1, backgroundColor: colors.pane2, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, maxHeight: 110, color: colors.text }} />
+      <Pressable onPress={send} disabled={!text.trim()} accessibilityRole="button" accessibilityLabel="Post comment" accessibilityState={{ disabled: !text.trim() }} testID="comment-send"
+        style={{ width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: text.trim() ? colors.gold : colors.pane2 }}>
+        <Icon name="arrow-up" size={20} color={text.trim() ? colors.onGold : colors.faint} />
+      </Pressable>
+    </View>
+  ) : data ? <Text style={{ color: colors.muted, textAlign: 'center', paddingVertical: 6 }}>Comments are turned off.</Text> : null;
   return (
-    <Sheet visible={visible} title="Comments" onClose={close}>
-      {!data ? <Empty>Loading…</Empty> : data.comments.length ? data.comments.map((c: any) => (
-        <View key={c.id} style={{ flexDirection: 'row', gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#221f24' }} testID="comment">
-          <Avatar user={c.author} size={30} />
+    <Sheet visible={visible} title={data ? `${n} ${n === 1 ? 'comment' : 'comments'}` : 'Comments'} onClose={close} footer={footer}>
+      {!data ? <Empty>Loading…</Empty> : n ? data.comments.map((c: any) => (
+        <View key={c.id} style={{ flexDirection: 'row', gap: 12, paddingVertical: 10 }} testID="comment">
+          <Avatar user={c.author} size={36} />
           <View style={{ flex: 1 }}>
-            <Row style={{ justifyContent: 'space-between' }}>
-              <Text style={styles.liTitle}>@{c.author.handle} <Text style={styles.muted}>· {ago(c.createdAt)}</Text></Text>
-              <Row>
-                {c.canDelete ? <Button title="Delete" small variant="secondary" onPress={() => del(c.id)} label="Delete comment" /> : null}
-                {!c.mine ? <Button title="Report" icon="flag-outline" small variant="ghost" onPress={() => setReportId(c.id)} label={`Report comment by @${c.author.handle}`} /> : null}
-              </Row>
-            </Row>
-            <P>{c.body}</P>
+            <Text style={{ color: colors.muted, fontSize: 13, fontWeight: '600' }}>{c.author.handle}<Text style={{ color: colors.faint, fontWeight: '400' }}>  {ago(c.createdAt)}</Text></Text>
+            <Text style={{ color: colors.text, fontSize: 15, lineHeight: 20, marginTop: 2 }}>{c.body}</Text>
             {c.status === 'held' ? <Tag>Held for review · only you can see this</Tag> : null}
+            <View style={{ flexDirection: 'row', gap: 16, marginTop: 6 }}>
+              {c.canDelete ? <Pressable onPress={() => del(c.id)} accessibilityRole="button" accessibilityLabel="Delete comment" hitSlop={8}><Text style={st.commentAction}>Delete</Text></Pressable> : null}
+              {!c.mine ? <Pressable onPress={() => setReportId(c.id)} accessibilityRole="button" accessibilityLabel={`Report comment by @${c.author.handle}`} hitSlop={8}><Text style={st.commentAction}>Report</Text></Pressable> : null}
+            </View>
           </View>
         </View>
-      )) : <Empty>No comments yet. Start a kind conversation.</Empty>}
-      {data?.allowComments ? (
-        <>
-          <Field label="Add a comment" value={text} onChangeText={setText} multiline maxLength={500} placeholder="Add a comment…" testID="comment-input" />
-          <Button title="Post comment" onPress={send} disabled={!text.trim()} block testID="comment-send" />
-        </>
-      ) : data ? <P muted>The creator has turned off comments.</P> : null}
+      )) : (
+        <View style={{ alignItems: 'center', paddingVertical: 36 }}>
+          <Icon name="chatbubble-ellipses-outline" size={36} color={colors.faint} />
+          <Text style={{ color: colors.muted, marginTop: 8 }}>No comments yet</Text>
+        </View>
+      )}
       <ReportSheet target={reportId ? { type: 'comment', id: reportId } : null} onClose={() => setReportId(null)} />
     </Sheet>
   );
@@ -177,3 +189,7 @@ function MoreBody({ post, onClose, onChanged }: { post: Post; onClose: () => voi
 }
 
 
+
+const st = StyleSheet.create({
+  commentAction: { color: colors.faint, fontSize: 13, fontWeight: '600' },
+});

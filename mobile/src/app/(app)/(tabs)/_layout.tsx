@@ -61,7 +61,7 @@ export default function TabsLayout() {
       tabBarLabelStyle: { fontFamily: font.medium, fontSize: 10, letterSpacing: 0.1 },
       sceneStyle: { backgroundColor: colors.app },
     }}>
-      <Tabs.Screen name="index" options={{ title: 'Home', tabBarIcon: tabIcon('home-outline', 'home'), tabBarAccessibilityLabel: 'Home feed' }} />
+      <Tabs.Screen name="index" options={{ title: 'Home', headerShown: false, tabBarIcon: tabIcon('home-outline', 'home'), tabBarAccessibilityLabel: 'Home feed' }} />
       <Tabs.Screen name="cinema" options={{ title: 'Cinema', tabBarIcon: tabIcon('film-outline', 'film'), tabBarAccessibilityLabel: 'Cinema' }} />
       <Tabs.Screen name="create" options={{ title: '', tabBarIcon: CreateIcon, tabBarAccessibilityLabel: 'Create a post' }} />
       <Tabs.Screen name="collabs" options={{ title: 'Collabs', tabBarIcon: tabIcon('briefcase-outline', 'briefcase'), tabBarAccessibilityLabel: 'Collaborations' }} />

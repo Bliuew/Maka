@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Text } from '../../../components/Text';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { Banner, Button, Card, Choice, Icon, Empty, Field, ListItem, Loading, P, Pills, Screen, SectionTitle, Sheet, Tag, useLoad } from '../../../components/ui';
+import { Button, Choice, Icon, Empty, Field, ListItem, Loading, P, Pills, Screen, SectionTitle, Sheet, Tag, useLoad } from '../../../components/ui';
 import { api, media } from '../../../lib/client';
 import { money } from '../../../core/format';
 import { useToast } from '../../../lib/toast';

@@ -4,7 +4,7 @@ import { Text } from './Text';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { Avatar, Button, Card, Field, Icon, Loading, Metrics, P, Row, Screen, SectionTitle, Sheet, Tag, useLoad } from './ui';
+import { Avatar, Button, Field, Icon, Loading, Metrics, P, Row, Screen, Sheet, Tag, useLoad } from './ui';
 import { ReportSheet } from './post';
 import { api, media } from '../lib/client';
 import { count } from '../core/format';
@@ -19,6 +19,12 @@ export default function ProfileView({ userKey }: { userKey: string }) {
   const { me, setMe } = useSession();
   const { data, error, reload, refreshing, setData } = useLoad(() => api.get('/api/users/' + encodeURIComponent(userKey)), [userKey]);
   const [more, setMore] = useState(false);
+  const [tab, setTab] = useState<'posts' | 'saved'>('posts');
+  const [saved, setSaved] = useState<any[] | null>(null);
+  const openTab = (t: 'posts' | 'saved') => {
+    setTab(t);
+    if (t === 'saved') api.get<any[]>('/api/me/saved').then(setSaved).catch(toast.error);
+  };
   const [report, setReport] = useState(false);
   const [edit, setEdit] = useState(false);
   const [name, setName] = useState(''); const [bio, setBio] = useState('');
@@ -26,6 +32,7 @@ export default function ProfileView({ userKey }: { userKey: string }) {
   if (!data) return <Loading error={error} onRetry={reload} />;
   const u = data.user;
   const own = u.id === me?.id;
+  const shown: any[] = tab === 'saved' ? saved || [] : data.posts;
   const act = (fn: () => Promise<unknown>) => async () => { try { await fn(); } catch (e) { toast.error(e); } };
   const follow = act(async () => {
     const r = u.isFollowing ? await api.del(`/api/users/${u.id}/follow`) : await api.post(`/api/users/${u.id}/follow`);
@@ -54,29 +61,29 @@ export default function ProfileView({ userKey }: { userKey: string }) {
 
   return (
     <Screen onRefresh={() => reload(true)} refreshing={refreshing}>
-      <Row style={{ marginTop: 16, gap: 14 }}>
-        <Avatar user={u} size={72} />
-        <View style={{ flex: 1 }}>
-          <Text style={s.name} accessibilityRole="header">{u.displayName}</Text>
-          <Text style={{ color: colors.muted }}>@{u.handle}</Text>
-          <Row wrap>
-            {u.isSample ? <Tag tone="grey">Sample account</Tag> : null}
-            {data.banned ? <Tag tone="red">Account removed</Tag> : null}
-            {own ? <Tag tone="green">19+ verified</Tag> : u.followsYou ? <Tag tone="grey">Follows you</Tag> : null}
-          </Row>
-        </View>
+      {/* Instagram-style header: avatar beside the counts, then name, bio and actions. */}
+      <Row style={{ marginTop: 14, gap: 18 }}>
+        <Avatar user={u} size={84} ring={own} />
+        <View style={{ flex: 1 }}><Metrics items={[[count(u.posts), 'Posts'], [count(u.followers), 'Followers'], [count(u.following), 'Following']]} /></View>
       </Row>
-      {u.bio ? <P>{u.bio}</P> : null}
-      <Metrics items={[[count(u.posts), 'Posts'], [count(u.followers), 'Followers'], [count(u.following), 'Following']]} />
-      <Row style={{ marginTop: 4, alignItems: 'flex-end' }}>
+      <Text style={s.name} accessibilityRole="header">{u.displayName}</Text>
+      <Text style={{ color: colors.muted, fontSize: 14 }}>@{u.handle}</Text>
+      {u.bio ? <Text style={s.bio}>{u.bio}</Text> : null}
+      <Row wrap>
+        {u.isSample ? <Tag tone="grey">Sample account</Tag> : null}
+        {data.banned ? <Tag tone="red">Account removed</Tag> : null}
+        {own ? <Tag tone="green">19+ verified</Tag> : u.followsYou ? <Tag tone="grey">Follows you</Tag> : null}
+      </Row>
+      <Row style={{ marginTop: 2, alignItems: 'flex-end' }}>
         {own ? (
           <>
             <View style={{ flex: 1 }}><Button title="Edit profile" variant="secondary" small block onPress={() => { setName(u.displayName); setBio(u.bio); setAvatar(null); setEdit(true); }} /></View>
             <View style={{ flex: 1 }}><Button title="Studio" variant="secondary" small block onPress={() => router.push('/studio')} /></View>
+            {me?.role === 'admin' ? <View style={{ marginTop: 14 }}><Button title="" icon="shield-checkmark-outline" label="Trust and Safety" variant="secondary" small onPress={() => router.push('/admin')} /></View> : null}
             <View style={{ marginTop: 14 }}><Button title="" icon="settings-outline" label="Settings and safety" variant="secondary" small onPress={() => router.push('/settings')} testID="open-settings" /></View>
           </>
         ) : u.isBlocked ? (
-          <Button title="Unblock" variant="secondary" onPress={act(async () => { await api.del(`/api/users/${u.id}/block`); toast.show('Unblocked'); reload(); })} />
+          <View style={{ flex: 1 }}><Button title="Unblock" variant="secondary" small block onPress={act(async () => { await api.del(`/api/users/${u.id}/block`); toast.show('Unblocked'); reload(); })} /></View>
         ) : (
           <>
             <View style={{ flex: 1 }}><Button title={u.isFollowing ? 'Following' : 'Follow'} variant={u.isFollowing ? 'secondary' : 'primary'} small block onPress={follow} label={u.isFollowing ? `Unfollow @${u.handle}` : `Follow @${u.handle}`} /></View>
@@ -85,10 +92,18 @@ export default function ProfileView({ userKey }: { userKey: string }) {
           </>
         )}
       </Row>
-      <SectionTitle>{own ? 'Your content' : 'Posts'}</SectionTitle>
-      {u.isBlocked ? <P muted>You blocked this account.</P> : data.posts.length ? (
+
+      <View style={s.gridTabs} accessibilityRole="tablist">
+        {(own ? (['posts', 'saved'] as const) : (['posts'] as const)).map((t) => (
+          <Pressable key={t} style={[s.gridTab, tab === t && s.gridTabOn]} onPress={() => openTab(t)} accessibilityRole="tab"
+            accessibilityState={{ selected: tab === t }} accessibilityLabel={t === 'posts' ? 'Posts' : 'Saved'}>
+            <Icon name={t === 'posts' ? (tab === t ? 'grid' : 'grid-outline') : (tab === t ? 'bookmark' : 'bookmark-outline')} size={22} color={tab === t ? colors.text : colors.faint} />
+          </Pressable>
+        ))}
+      </View>
+      {u.isBlocked ? <P muted>You blocked this account.</P> : shown.length ? (
         <View style={s.grid}>
-          {data.posts.map((p: any) => (
+          {shown.map((p: any) => (
             <Pressable key={p.id} style={s.thumb} onPress={() => router.push(`/p/${p.id}`)} accessibilityRole="button" accessibilityLabel={`Open post: ${p.caption.slice(0, 60) || 'Untitled'}. ${p.views} views`} testID="thumb">
               {media(p.posterUrl) ? <Image source={{ uri: media(p.posterUrl)! }} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
               {p.status !== 'published' ? <Text style={s.badge}>{p.status}</Text> : null}
@@ -97,7 +112,11 @@ export default function ProfileView({ userKey }: { userKey: string }) {
           ))}
         </View>
       ) : (
-        <Card><P muted style={{ textAlign: 'center' }}>{own ? 'Your posts will appear here.' : 'No posts yet.'}</P>{own ? <Button title="Create your first post" onPress={() => router.navigate('/create')} /> : null}</Card>
+        <View style={s.emptyGrid}>
+          <Icon name={tab === 'saved' ? 'bookmark-outline' : 'camera-outline'} size={40} color={colors.faint} />
+          <Text style={{ color: colors.muted, marginTop: 10, marginBottom: 14 }}>{tab === 'saved' ? 'Nothing saved yet' : own ? 'Share your first video' : 'No posts yet'}</Text>
+          {own && tab === 'posts' ? <Button title="Create your first post" onPress={() => router.navigate('/create')} /> : null}
+        </View>
       )}
       <Sheet visible={more} title={'@' + u.handle} onClose={() => setMore(false)}>
         <Button title="Report account" icon="flag-outline" variant="secondary" block onPress={() => setReport(true)} testID="report-account" />
@@ -119,10 +138,15 @@ export default function ProfileView({ userKey }: { userKey: string }) {
 }
 
 const s = StyleSheet.create({
-  name: { color: colors.text, fontSize: 21, fontWeight: '800' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
-  thumb: { width: '32.5%', aspectRatio: 9 / 16, backgroundColor: colors.pane2, borderRadius: 8, overflow: 'hidden', justifyContent: 'flex-end' },
+  name: { color: colors.text, fontSize: 16, fontWeight: '700', marginTop: 12 },
+  bio: { color: colors.text, fontSize: 14, lineHeight: 19, marginTop: 6 },
+  gridTabs: { flexDirection: 'row', marginTop: 18, marginHorizontal: -16, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
+  gridTab: { flex: 1, alignItems: 'center', paddingVertical: 11, borderBottomWidth: 1.5, borderBottomColor: 'transparent' },
+  gridTabOn: { borderBottomColor: colors.text },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 2, marginHorizontal: -16 },
+  thumb: { width: '33%', flexGrow: 1, maxWidth: '33.4%', aspectRatio: 9 / 16, backgroundColor: colors.pane2, overflow: 'hidden', justifyContent: 'flex-end' },
   viewsRow: { flexDirection: 'row', alignItems: 'center', gap: 3, padding: 6 },
   views: { color: '#fff', fontWeight: '600', fontSize: 12, textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 4 },
-  badge: { position: 'absolute', top: 6, left: 6, color: colors.onGold, backgroundColor: colors.gold, borderRadius: 6, paddingHorizontal: 6, fontSize: 11, fontWeight: '800', overflow: 'hidden' },
+  badge: { position: 'absolute', top: 6, left: 6, color: colors.onGold, backgroundColor: colors.gold, borderRadius: 6, paddingHorizontal: 6, fontSize: 11, fontWeight: '700', overflow: 'hidden' },
+  emptyGrid: { alignItems: 'center', paddingVertical: 48 },
 });

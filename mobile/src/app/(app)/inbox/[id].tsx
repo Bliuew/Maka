@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from '../../../components/Text';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { Button, Icon, Loading, styles as ui } from '../../../components/ui';
+import { Icon, Loading, styles as ui } from '../../../components/ui';
 import { ReportSheet } from '../../../components/post';
 import { api } from '../../../lib/client';
 import { ago } from '../../../core/format';
@@ -85,9 +85,12 @@ export default function Thread() {
           </View>
         )} />
       <View style={s.composer}>
-        <TextInput value={text} onChangeText={setText} placeholder="Write a respectful message…" placeholderTextColor="#77737b" style={[ui.field, { flex: 1 }]}
-          accessibilityLabel="Message" maxLength={2000} onSubmitEditing={send} returnKeyType="send" testID="message-input" />
-        <Button title="Send" onPress={send} disabled={!text.trim()} testID="message-send" />
+        <TextInput value={text} onChangeText={setText} placeholder="Message…" placeholderTextColor={colors.faint} multiline
+          style={s.input} accessibilityLabel="Message" maxLength={2000} testID="message-input" />
+        <Pressable onPress={send} disabled={!text.trim()} accessibilityRole="button" accessibilityLabel="Send" accessibilityState={{ disabled: !text.trim() }} testID="message-send"
+          style={[s.send, text.trim() ? { backgroundColor: colors.gold } : null]}>
+          <Icon name="arrow-up" size={20} color={text.trim() ? colors.onGold : colors.faint} />
+        </Pressable>
       </View>
       <ReportSheet target={report ? { type: 'message', id: report, label: 'Report message' } : null} onClose={() => setReport(null)} />
     </KeyboardAvoidingView>
@@ -100,5 +103,7 @@ const s = StyleSheet.create({
   held: { opacity: 0.6, borderWidth: 1, borderColor: colors.red },
   body: { color: colors.text, fontSize: 15, lineHeight: 20 },
   small: { color: colors.muted, fontSize: 11, marginTop: 2 },
-  composer: { flexDirection: 'row', gap: 8, padding: 10, borderTopWidth: 1, borderTopColor: '#2c292f', alignItems: 'center' },
+  composer: { flexDirection: 'row', gap: 8, paddingHorizontal: 10, paddingVertical: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line, alignItems: 'flex-end' },
+  input: { flex: 1, backgroundColor: colors.pane2, borderRadius: 22, paddingHorizontal: 16, paddingVertical: 10, fontSize: 15, maxHeight: 120, color: colors.text },
+  send: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.pane2 },
 });

@@ -2,7 +2,7 @@
 // nothing in the community is reachable until age verification is complete.
 // (The server enforces this too; this only decides which screens to show.)
 
-export type Me = { id: string; role: 'user' | 'admin'; ageStatus: 'unverified' | 'pending' | 'verified' | 'failed' | 'review'; [k: string]: any };
+export type Me = { id: string; role: 'user' | 'admin'; ageStatus: 'unverified' | 'pending' | 'verified' | 'failed' | 'review'; handle?: string; displayName?: string; avatarUrl?: string | null; [k: string]: any };
 export type Area = 'auth' | 'age' | 'app';
 
 export function areaFor(token: string | null, me: Me | null): Area {
