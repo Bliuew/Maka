@@ -4,13 +4,23 @@ Milestone 1 of the Mäka 19+ social platform: a working **backend API** and a **
 
 ## Run it
 
-Requirements: **Node.js 22.5+** and **ffmpeg/ffprobe** on the PATH. There are no npm dependencies.
+Requirements: **Node.js 22.5+**, **ffmpeg/ffprobe** on the PATH, **PostgreSQL** and (recommended) an **S3-compatible bucket**. `docker compose up -d` starts Postgres and MinIO locally.
 
 ```bash
+docker compose up -d      # Postgres 16 + MinIO (S3-compatible) for development
+cp .env.example .env && set -a && . ./.env && set +a
+npm ci
 npm start                 # http://localhost:8080  (seeds clearly-labelled sample data in development)
-npm test                  # 13 API + policy tests
+npm test                  # API + policy tests (against DATABASE_URL, and S3 when S3_BUCKET is set)
 npm run test:e2e          # 22-step acceptance demo in a phone-sized browser (needs Playwright + Chromium)
 ```
+
+| Setting | Purpose |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string (required). `DATABASE_SSL=1` forces TLS. `DATABASE_SCHEMA` isolates a run in its own schema (tests use this). |
+| `S3_BUCKET`, `S3_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_FORCE_PATH_STYLE=1` | Media storage in any S3-compatible service (AWS S3, Cloudflare R2, Backblaze B2, MinIO). Without `S3_BUCKET` media is kept on local disk, which is allowed **only outside production**. `S3_CREATE_BUCKET=1` creates the bucket (dev/CI). |
+
+Uploaded chunks are stored as parts in the bucket and the byte offset is kept in Postgres, so a resumable upload can continue on a different server instance. Transcoding runs in a temporary directory, and the results (`media/<id>/video.mp4`, `poster.jpg`) are uploaded back. Media is still served through signed, expiring `/media/...` URLs with Range support, which are proxied from the bucket.
 
 Dev moderator login: `trust.safety@sample.maka.test` / `dev-admin-password` (change it with `SEED_ADMIN_PASSWORD`).
 
@@ -44,7 +54,7 @@ Dev moderator login: `trust.safety@sample.maka.test` / `dev-admin-password` (cha
 4. **Automated moderation.** The text screen is a deterministic first layer. Needs a hate-speech lexicon maintained by Trust & Safety (`MAKA_LEXICON_FILE`), ML text and image/video classifiers, CSAM hash matching (e.g. PhotoDNA), and malware scanning of uploads (`MEDIA_SCANNER`).
 5. **Push notifications.** In-app realtime works. Native push needs APNs and FCM keys.
 6. **Native iOS/Android apps (next milestone).** This build is a web client that installs to the home screen. The React Native / Expo app needs a session where npm installs are allowed, plus an Apple Developer account and a Google Play console for builds. It will call this same API. No store submission has happened.
-7. **Scale and operations.** Planned moves: SQLite → Postgres with row-level security, local disk → object storage plus a transcoding queue, in-memory rate limits and realtime → Redis. Also needed: CI/CD, monitoring and backups. Every query is already written against a small helper, so the data layer can be swapped.
+7. **Scale and operations.** Done: PostgreSQL and S3-compatible object storage, and CI against both. Still to do: transcoding still runs inside the web process, so it should move to a job queue. Rate limits and realtime fan-out are in-memory, so several instances need Redis (or Postgres LISTEN/NOTIFY). Monitoring, backups and Postgres row-level security also need setting up.
 8. **Legal.** Terms, Privacy Policy, Community Guidelines and retention periods need legal review (GDPR, PIPEDA and local law). The registration ID, contact and appeal email addresses are placeholders.
 9. **Branding.** `web/assets/icon-*.png` is an **interim** bee-only icon cut from the approved wordmark. Overlapping letter strokes were painted out and the bee was not redrawn (`scripts/make_bee_icon.py`). Swap in the illustrator's standalone transparent export when it's ready.
 
@@ -53,7 +63,7 @@ All sample creators, brands, products, campaigns and films are flagged `is_sampl
 ## Layout
 
 ```
-server/   index.js · app.js · db.js (schema) · http.js · media.js · safety.js · age.js · seed.js · routes/*
+server/   index.js · app.js · db.js (Postgres schema + helpers) · storage.js (S3 / local) · http.js · media.js · safety.js · age.js · seed.js · routes/*
 web/      index.html · app.css · js/{api,core,ui,app,sections}.js · assets/
 tests/    api.test.js · e2e.mjs · screens/ (latest E2E screenshots)
 docs/     CLAUDE_BUILD_BRIEF.md
@@ -61,10 +71,10 @@ docs/     CLAUDE_BUILD_BRIEF.md
 
 ## Deploy a private staging server
 
-The repo includes a `Dockerfile` (Node 22 + ffmpeg), a Render Blueprint (`render.yaml`) and `railway.json`.
+The repo includes a `Dockerfile` (Node 22 + ffmpeg), a Render Blueprint (`render.yaml`) and `railway.json`. The container is stateless: data is in Postgres and media in your bucket.
 
-- **Render:** New → Blueprint → pick this repo. Render generates `MAKA_SECRET`, `SEED_ADMIN_PASSWORD` and `INVITE_CODE`; find them under the service's **Environment** tab. A persistent disk is mounted at `/data`, so posts survive redeploys. Disks need a paid instance (Starter).
-- **Railway:** New Project → Deploy from GitHub repo, then add a Volume mounted at `/data` and set `NODE_ENV=staging`, `MAKA_SECRET`, `INVITE_CODE` and `SEED_ADMIN_PASSWORD`.
+- **Render:** New → Blueprint → pick this repo. It creates a Render PostgreSQL database and wires `DATABASE_URL`. Render generates `MAKA_SECRET`, `SEED_ADMIN_PASSWORD` and `INVITE_CODE` (find them under the service's **Environment** tab). Fill in the `S3_*` values for your bucket (for example Cloudflare R2).
+- **Railway:** New Project → Deploy from GitHub repo, add the **PostgreSQL** plugin (it sets `DATABASE_URL`), then set `NODE_ENV=staging`, `MAKA_SECRET`, `INVITE_CODE`, `SEED_ADMIN_PASSWORD` and the `S3_*` values.
 
 Staging runs the **labelled age-verification simulator**, so keep it invite-only (`INVITE_CODE`). The server refuses `NODE_ENV=production` until a real 19+ provider is connected.
 
@@ -74,4 +84,4 @@ Staging runs the **labelled age-verification simulator**, so keep it invite-only
 2. Open **Secrets** and add `MAKA_SECRET` (any long random text), `INVITE_CODE` (the code testers type at sign-up) and `SEED_ADMIN_PASSWORD` (moderator password).
 3. Press **Run** to try it in the preview, then **Publish → Reserved VM**. You get a `https://<name>.replit.app` address.
 
-**Data persistence:** posts, accounts and videos are kept on local disk for now, so a republish can reset them. The next milestone moves them to Replit's PostgreSQL database and App Storage.
+**Data persistence:** add Replit's **PostgreSQL** database (it sets `DATABASE_URL`). For media, add `S3_*` secrets for an S3-compatible bucket such as Cloudflare R2. Replit's own App Storage does not offer S3 keys, so the S3 driver can't use it.
