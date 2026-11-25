@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
+import { Text } from '../../../components/Text';
 import { useRouter } from 'expo-router';
-import { Avatar, Button, Empty, Field, ListItem, Loading, Row, Screen, SectionTitle, Sheet, useLoad } from '../../../components/ui';
+import { Avatar, Button, Icon, Empty, Field, ListItem, Loading, Row, Screen, SectionTitle, Sheet, useLoad } from '../../../components/ui';
 import { api } from '../../../lib/client';
 import { ago } from '../../../core/format';
 import { on } from '../../../lib/events';
@@ -31,13 +32,13 @@ export default function Inbox() {
     } catch (e) { toast.error(e); }
   };
   return (
-    <Screen eyebrow="Connect with kindness" title="✉ Inbox" intro="Private messages, group chats, brand conversations and activity." onRefresh={() => reload(true)} refreshing={refreshing}>
+    <Screen title="Inbox" onRefresh={() => reload(true)} refreshing={refreshing}>
       <Row><Button title="New message" onPress={() => setCompose('chat')} /><Button title="New group" variant="secondary" onPress={() => setCompose('group')} /></Row>
       <SectionTitle>Messages</SectionTitle>
       {data.convs.length ? data.convs.map((c) => (
         <ListItem key={c.id} title={c.title} testID="conversation"
           subtitle={c.lastMessage ? (c.lastMessage.mine ? 'You: ' : '') + c.lastMessage.body : 'No messages yet'}
-          left={c.isGroup ? <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#2a2219', alignItems: 'center', justifyContent: 'center' }}><Text>👥</Text></View> : <Avatar user={c.members[0]} />}
+          left={c.isGroup ? <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.pane3, alignItems: 'center', justifyContent: 'center' }}><Icon name="people" size={20} color={colors.gold} /></View> : <Avatar user={c.members[0]} />}
           right={c.unread ? <View style={{ backgroundColor: colors.gold, borderRadius: 10, minWidth: 20, paddingHorizontal: 6, alignItems: 'center' }}><Text style={{ color: colors.onGold, fontWeight: '900' }}>{c.unread}</Text></View> : undefined}
           label={`${c.title}${c.unread ? `, ${c.unread} unread` : ''}`}
           onPress={() => router.push(`/inbox/${c.id}`)} />

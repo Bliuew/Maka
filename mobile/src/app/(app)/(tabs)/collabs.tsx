@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { Text } from '../../../components/Text';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Banner, Button, Card, Choice, Empty, Field, ListItem, Loading, P, Pills, Screen, SectionTitle, Sheet, Tag, useLoad } from '../../../components/ui';
@@ -34,8 +35,8 @@ export default function Collabs() {
     } catch (e) { toast.error(e); }
   };
   return (
-    <Screen eyebrow="Every creator belongs" title="🤝 Collaborations" onRefresh={() => reload(true)} refreshing={refreshing}
-      intro="Paid briefs from verified businesses, open to every 19+ verified creator. Follower counts are visible but never decide who can apply.">
+    <Screen title="Collabs" onRefresh={() => reload(true)} refreshing={refreshing}
+      intro="Paid briefs from verified businesses, open to every verified creator.">
       <Card><Text style={{ color: colors.gold, fontWeight: '800' }}>Talent over follower count.</Text>
         <P>No nano, micro or mega tiers and no follower minimums. Brands choose on fit, creativity, quality and reliability.</P></Card>
       <Pills label="Category" value={cat} onChange={setCat} options={[{ value: '', label: 'All' }, ...data.categories.map((c: string) => ({ value: c, label: c }))]} />

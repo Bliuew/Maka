@@ -1,43 +1,73 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { Button, Field, P, Screen } from '../../components/ui';
-import { BRAND, TAGLINE, colors } from '../../lib/theme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Button, Field, Icon, Text, type IconName } from '../../components/ui';
+import { BRAND, TAGLINE, colors, font, type } from '../../lib/theme';
 import { serverUrl, setServerUrl } from '../../lib/client';
 import { useToast } from '../../lib/toast';
+
+const POINTS: [IconName, string, string][] = [
+  ['play-circle-outline', 'Create and discover', 'Short videos ranked on quality, never on follower counts.'],
+  ['shield-checkmark-outline', 'Kind by design', 'Abuse is held for review. Report, block and mute in one tap.'],
+  ['film-outline', 'Free cinema and fair collabs', 'Licensed films, and paid briefs open to every creator.'],
+];
 
 export default function Welcome() {
   const router = useRouter();
   const toast = useToast();
+  const insets = useSafeAreaInsets();
   const [showServer, setShowServer] = useState(false);
   const [server, setServer] = useState(serverUrl());
   return (
-    <Screen>
-      <View style={s.logoCard}>
-        {/* Founder-approved artwork, used unchanged. */}
-        <Image source={require('../../../assets/brand/approved-logo.webp')} style={s.logo} contentFit="contain" accessibilityLabel={`${BRAND} — ${TAGLINE}`} testID="approved-logo" />
-      </View>
-      <P style={{ textAlign: 'center' }}>A respectful community for creators, film lovers and businesses. <Text style={{ fontWeight: '800' }}>Strictly 19+.</Text></P>
-      <View style={{ gap: 10, marginTop: 18 }}>
+    <View style={[s.wrap, { paddingBottom: insets.bottom + 16 }]}>
+      <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <View style={s.logoCard}>
+          {/* Founder-approved wordmark, used unchanged. */}
+          <Image source={require('../../../assets/brand/approved-logo.webp')} style={s.logo} contentFit="contain" accessibilityLabel={`${BRAND} — ${TAGLINE}`} testID="approved-logo" />
+        </View>
+        <View style={s.points}>
+          {POINTS.map(([icon, title, text]) => (
+            <View key={title} style={s.point} accessible accessibilityLabel={`${title}. ${text}`}>
+              <View style={s.pointIcon}><Icon name={icon} size={22} color={colors.gold} /></View>
+              <View style={{ flex: 1 }}>
+                <Text style={type.bodyStrong}>{title}</Text>
+                <Text style={[type.callout, { color: colors.muted, marginTop: 2 }]}>{text}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+        {showServer ? (
+          <View style={{ marginTop: 8 }}>
+            <Field label="Server address" value={server} onChangeText={setServer} autoCapitalize="none" autoCorrect={false} keyboardType="url" placeholder="https://staging.example.com" />
+            <Button title="Use this server" small variant="secondary" block onPress={() => { setServerUrl(server || null); toast.show('Server set to ' + serverUrl()); }} />
+          </View>
+        ) : null}
+      </ScrollView>
+      <View style={s.ctas}>
         <Button title="Create account" block onPress={() => router.push('/signup')} />
         <Button title="Sign in" variant="secondary" block onPress={() => router.push('/signin')} />
+        <Text style={s.legal}>
+          <Text style={{ fontFamily: font.semibold, color: colors.text }}>Strictly 19+.</Text> You’ll confirm your age with one privacy-first method before using {BRAND}.
+        </Text>
+        <Pressable onPress={() => setShowServer(!showServer)} accessibilityRole="button" accessibilityLabel={showServer ? 'Hide server settings' : 'Server settings (test builds)'} hitSlop={8}>
+          <Text style={s.server}>{showServer ? 'Hide server settings' : 'Server settings'}</Text>
+        </Pressable>
       </View>
-      <P muted style={{ textAlign: 'center', marginTop: 18 }}>You’ll confirm you are 19 or older with a privacy-first verification method before you can use {BRAND}.</P>
-      <View style={{ marginTop: 28 }}>
-        <Button title={showServer ? 'Hide server settings' : 'Server settings (test builds)'} small variant="secondary" onPress={() => setShowServer(!showServer)} />
-        {showServer ? (
-          <>
-            <Field label="Server address" value={server} onChangeText={setServer} autoCapitalize="none" autoCorrect={false} keyboardType="url" placeholder="https://staging.example.com" />
-            <View style={{ marginTop: 8 }}><Button title="Use this server" small onPress={() => { setServerUrl(server || null); toast.show('Server set to ' + serverUrl()); }} /></View>
-          </>
-        ) : null}
-      </View>
-    </Screen>
+    </View>
   );
 }
 
 const s = StyleSheet.create({
-  logoCard: { backgroundColor: colors.cream, borderRadius: 22, marginTop: 24, marginBottom: 18, padding: 8, alignItems: 'center' },
+  wrap: { flex: 1, backgroundColor: colors.bg },
+  scroll: { paddingHorizontal: 20, paddingTop: 28 },
+  logoCard: { backgroundColor: colors.cream, borderRadius: 24, padding: 6, overflow: 'hidden' },
   logo: { width: '100%', aspectRatio: 512 / 341 },
+  points: { marginTop: 28, gap: 18 },
+  point: { flexDirection: 'row', gap: 14, alignItems: 'center' },
+  pointIcon: { width: 44, height: 44, borderRadius: 12, backgroundColor: colors.goldSoft, alignItems: 'center', justifyContent: 'center' },
+  ctas: { paddingHorizontal: 20, paddingTop: 8 },
+  legal: { ...type.caption, color: colors.muted, textAlign: 'center', marginTop: 14, lineHeight: 17 },
+  server: { ...type.caption, color: colors.faint, textAlign: 'center', marginTop: 10, textDecorationLine: 'underline' },
 });

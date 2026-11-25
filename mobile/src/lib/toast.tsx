@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
-import { AccessibilityInfo, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, StyleSheet, View } from 'react-native';
+import { Text } from '../components/Text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radius } from './theme';
 
@@ -39,7 +40,8 @@ export function useToast(): Toast {
 
 const styles = StyleSheet.create({
   wrap: { position: 'absolute', left: 16, right: 16, alignItems: 'center' },
-  toast: { backgroundColor: colors.cream, borderRadius: radius.md, paddingHorizontal: 16, paddingVertical: 12, maxWidth: 480 },
-  err: { backgroundColor: '#ffd9dd' },
-  text: { color: '#1a1310', fontWeight: '700', textAlign: 'center' },
+  toast: { backgroundColor: colors.pane3, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12, maxWidth: 480, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineStrong,
+    shadowColor: '#000', shadowOpacity: 0.35, shadowRadius: 16, shadowOffset: { width: 0, height: 6 }, elevation: 8 },
+  err: { backgroundColor: '#3a1d24', borderColor: 'rgba(255,107,125,0.4)' },
+  text: { color: colors.text, fontWeight: '500', fontSize: 14, textAlign: 'center' },
 });

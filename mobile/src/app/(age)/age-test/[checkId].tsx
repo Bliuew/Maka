@@ -19,7 +19,7 @@ export default function AgeSimulator() {
       const r = await api.post('/api/age/test/complete', { checkId, outcome, testIdentity: identity });
       if (r.outcome === 'under_age') { setClosed(true); return; }
       if (r.user) setMe(r.user);
-      if (r.outcome === 'verified') toast.show('Age confirmed. Welcome to Mäka 🐝');
+      if (r.outcome === 'verified') toast.show('Age confirmed. Welcome to Mäka');
       else router.replace('/verify');
     } catch (e) { toast.error(e); }
   };

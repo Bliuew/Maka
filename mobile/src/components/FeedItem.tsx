@@ -1,15 +1,18 @@
 // One full-screen story in the vertical feed.
 import React, { useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useEvent } from 'expo';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
+import { Text } from './Text';
 import { api, media } from '../lib/client';
 import { count } from '../core/format';
-import { colors } from '../lib/theme';
-import { Avatar } from './ui';
-import { ActionButton, type Post } from './post';
+import { colors, font, type } from '../lib/theme';
+import { Avatar, Icon, type IconName } from './ui';
+import { type Post } from './post';
 import { useSession } from '../lib/session';
 
 type Props = {
@@ -19,12 +22,14 @@ type Props = {
 };
 
 const viewed = new Set<string>();
+const tap = () => { if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); };
 
 type PlayerHandle = { toggle: () => void };
 
 function Player({ uri, active, muted, onPausedChange, ref }: { uri: string; active: boolean; muted: boolean; onPausedChange: (p: boolean) => void; ref: React.Ref<PlayerHandle> }) {
-  const player = useVideoPlayer({ uri }, (p) => { p.loop = true; p.muted = muted; });
+  const player = useVideoPlayer({ uri }, (p) => { p.loop = true; p.muted = muted; p.timeUpdateEventInterval = 0.25; });
   const { isPlaying } = useEvent(player, 'playingChange', { isPlaying: player.playing });
+  const time = useEvent(player, 'timeUpdate', null);
   const userPaused = useRef(false);
   // expo-video's player is an imperative native object: its properties are set by assignment.
   // eslint-disable-next-line react-hooks/immutability
@@ -40,7 +45,23 @@ function Player({ uri, active, muted, onPausedChange, ref }: { uri: string; acti
       else { userPaused.current = false; player.play(); }
     },
   }), [player]);
-  return <VideoView player={player} style={StyleSheet.absoluteFill} contentFit="cover" nativeControls={false} accessible={false} />;
+  const progress = time && player.duration ? Math.min(1, time.currentTime / player.duration) : 0;
+  return (
+    <>
+      <VideoView player={player} style={StyleSheet.absoluteFill} contentFit="cover" nativeControls={false} accessible={false} />
+      <View style={s.track} pointerEvents="none"><View style={[s.progress, { width: `${progress * 100}%` }]} /></View>
+    </>
+  );
+}
+
+function RailButton({ icon, label, text, color, onPress, testID, selected }: { icon: IconName; label: string; text?: string; color?: string; onPress: () => void; testID?: string; selected?: boolean }) {
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} accessibilityState={selected === undefined ? undefined : { selected }} testID={testID}
+      style={({ pressed }) => [s.rail, pressed && { transform: [{ scale: 0.88 }] }]} hitSlop={6}>
+      <Icon name={icon} size={33} color={color || '#fff'} style={s.iconShadow} />
+      {text !== undefined ? <Text style={s.railText}>{text}</Text> : null}
+    </Pressable>
+  );
 }
 
 export default function FeedItem(p: Props) {
@@ -63,14 +84,15 @@ export default function FeedItem(p: Props) {
     return () => clearTimeout(t);
   }, [p.active, post.id]);
 
-  const onTap = () => {
+  const like = () => { if (!post.liked) tap(); p.onLike(); };
+  const onSurface = () => {
     const t = Date.now();
     if (t - lastTap.current < 300) { // double tap = like
       if (tapTimer.current) clearTimeout(tapTimer.current);
       lastTap.current = 0;
-      if (!post.liked) p.onLike();
+      if (!post.liked) like();
       heart.setValue(1);
-      Animated.timing(heart, { toValue: 0, duration: 800, useNativeDriver: true }).start();
+      Animated.timing(heart, { toValue: 0, duration: 900, useNativeDriver: true }).start();
       return;
     }
     lastTap.current = t;
@@ -81,60 +103,78 @@ export default function FeedItem(p: Props) {
     <View style={[s.story, { height: p.height }]} accessibilityLabel={`Post by @${post.author.handle}`} testID={`story-${post.id}`}>
       {still ? <Image source={{ uri: still }} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} /> : null}
       {video && p.nearby ? <Player uri={video} active={p.active} muted={p.muted} onPausedChange={setPaused} ref={playRef} /> : null}
-      <Pressable style={StyleSheet.absoluteFill} onPress={onTap} accessibilityRole="button"
+      <LinearGradient colors={['rgba(0,0,0,0.45)', 'transparent']} style={s.topShade} pointerEvents="none" />
+      <LinearGradient colors={['transparent', 'rgba(0,0,0,0.65)']} style={s.bottomShade} pointerEvents="none" />
+      <Pressable style={StyleSheet.absoluteFill} onPress={onSurface} accessibilityRole="button"
         accessibilityLabel={`${post.kind === 'video' ? 'Video' : 'Photo'} by @${post.author.handle}${post.altText ? ': ' + post.altText : ''}. Tap to ${paused ? 'play' : 'pause'}, double-tap to like.`}
         accessibilityActions={[{ name: 'activate' }, { name: 'longpress', label: 'Like' }]}
-        onAccessibilityAction={(e) => { if (e.nativeEvent.actionName === 'longpress') p.onLike(); else playRef.current?.toggle(); }} testID="story-surface" />
+        onAccessibilityAction={(e) => { if (e.nativeEvent.actionName === 'longpress') like(); else playRef.current?.toggle(); }} testID="story-surface" />
       {p.header}
       {video ? (
-        <Pressable style={s.mute} onPress={p.onToggleMute} accessibilityRole="button" accessibilityLabel={p.muted ? 'Unmute' : 'Mute'} hitSlop={8}>
-          <Text style={{ fontSize: 20 }}>{p.muted ? '🔇' : '🔊'}</Text>
+        <Pressable style={s.mute} onPress={p.onToggleMute} accessibilityRole="button" accessibilityLabel={p.muted ? 'Unmute' : 'Mute'} hitSlop={10}>
+          <Icon name={p.muted ? 'volume-mute' : 'volume-high'} size={18} color="#fff" />
         </Pressable>
       ) : null}
-      {paused && p.active && video ? <Text style={s.pause} accessible={false} pointerEvents="none">❚❚</Text> : null}
-      <Animated.Text pointerEvents="none" style={[s.heart, { opacity: heart, transform: [{ scale: heart.interpolate({ inputRange: [0, 1], outputRange: [1.4, 1] }) }] }]} accessible={false}>♥</Animated.Text>
+      {paused && p.active && video ? <View style={s.pause} pointerEvents="none"><Icon name="play" size={64} color="rgba(255,255,255,0.85)" /></View> : null}
+      <Animated.View pointerEvents="none" style={[s.heart, { opacity: heart, transform: [{ scale: heart.interpolate({ inputRange: [0, 1], outputRange: [1.35, 1] }) }] }]}>
+        <Icon name="heart" size={110} color={colors.like} />
+      </Animated.View>
+
       <View style={s.body} pointerEvents="box-none">
-        <View style={s.handleRow}>
-          <Pressable style={s.who} onPress={() => router.push(`/u/${post.author.handle}`)} accessibilityRole="button" accessibilityLabel={`Open @${post.author.handle}’s profile`}>
-            <Avatar user={post.author} size={34} /><Text style={s.handle}>@{post.author.handle}</Text>
+        <Pressable onPress={() => router.push(`/u/${post.author.handle}`)} accessibilityRole="button" accessibilityLabel={`Open @${post.author.handle}’s profile`} style={{ alignSelf: 'flex-start' }}>
+          <Text style={s.handle}>@{post.author.handle}</Text>
+        </Pressable>
+        {post.caption ? <Text style={s.caption} numberOfLines={3}>{post.caption}</Text> : null}
+        <View style={s.chips}>
+          {post.isPaidPartnership ? <Text style={s.chip}>Paid partnership</Text> : null}
+          {post.author.isSample ? <Text style={s.chip}>Sample account</Text> : null}
+          {post.status !== 'published' ? <Text style={s.chip}>{post.status}</Text> : null}
+        </View>
+      </View>
+
+      <View style={s.actions}>
+        <View style={s.avatarWrap}>
+          <Pressable onPress={() => router.push(`/u/${post.author.handle}`)} accessibilityRole="button" accessibilityLabel={`Open @${post.author.handle}’s profile`}>
+            <View style={s.avatarRing}><Avatar user={post.author} size={46} /></View>
           </Pressable>
           {mine ? null : (
-            <Pressable style={[s.follow, post.author.isFollowing && s.following]} onPress={p.onFollow} accessibilityRole="button"
+            <Pressable style={[s.follow, post.author.isFollowing && s.following]} onPress={() => { tap(); p.onFollow(); }} accessibilityRole="button" hitSlop={8}
               accessibilityState={{ selected: post.author.isFollowing }} accessibilityLabel={post.author.isFollowing ? `Following @${post.author.handle}` : `Follow @${post.author.handle}`} testID="follow">
-              <Text style={s.followText}>{post.author.isFollowing ? 'Following' : '+ Follow'}</Text>
+              <Icon name={post.author.isFollowing ? 'checkmark' : 'add'} size={14} color={post.author.isFollowing ? colors.onGold : '#fff'} />
             </Pressable>
           )}
         </View>
-        <Text style={s.caption} numberOfLines={4}>{post.caption}</Text>
-        {post.isPaidPartnership ? <Text style={s.tagline}>Paid partnership</Text> : null}
-        {post.author.isSample ? <Text style={s.tagline}>Sample account</Text> : null}
-        {post.status !== 'published' ? <Text style={s.tagline}>Status: {post.status}</Text> : null}
-      </View>
-      <View style={s.actions}>
-        <ActionButton glyph={post.liked ? '♥' : '♡'} on={post.liked} text={count(post.likes)} label={`Like, ${post.likes} likes`} onPress={p.onLike} testID="like" />
-        <ActionButton glyph="💬" text={count(post.comments)} label={`Comments, ${post.comments}`} onPress={p.onComments} testID="comments" />
-        <ActionButton glyph={post.saved ? '◆' : '◇'} on={post.saved} text="Save" label="Save" onPress={p.onSave} />
-        <ActionButton glyph="↗" text="Share" label="Share" onPress={p.onShare} />
-        <ActionButton glyph="⋯" text="More" label="More options and report" onPress={p.onMore} testID="more" />
+        <RailButton icon={post.liked ? 'heart' : 'heart-outline'} color={post.liked ? colors.like : '#fff'} selected={post.liked} text={count(post.likes)} label={`Like, ${post.likes} likes`} onPress={like} testID="like" />
+        <RailButton icon="chatbubble-ellipses-outline" text={count(post.comments)} label={`Comments, ${post.comments}`} onPress={p.onComments} testID="comments" />
+        <RailButton icon={post.saved ? 'bookmark' : 'bookmark-outline'} color={post.saved ? colors.gold : '#fff'} selected={post.saved} text="Save" label="Save" onPress={p.onSave} />
+        <RailButton icon="arrow-redo-outline" text="Share" label="Share" onPress={p.onShare} />
+        <RailButton icon="ellipsis-horizontal" label="More options and report" onPress={p.onMore} testID="more" />
       </View>
     </View>
   );
 }
 
-const shadow = { textShadowColor: 'rgba(0,0,0,0.8)', textShadowRadius: 6 };
+const shadow = { textShadowColor: 'rgba(0,0,0,0.55)', textShadowRadius: 8, textShadowOffset: { width: 0, height: 1 } };
 const s = StyleSheet.create({
   story: { width: '100%', backgroundColor: '#000', overflow: 'hidden' },
-  mute: { position: 'absolute', top: 60, right: 14, backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 20, width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  pause: { position: 'absolute', alignSelf: 'center', top: '42%', fontSize: 54, color: 'rgba(255,255,255,0.85)' },
-  heart: { position: 'absolute', alignSelf: 'center', top: '38%', fontSize: 110, color: colors.gold },
-  body: { position: 'absolute', left: 14, right: 84, bottom: 18 },
-  handleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
-  who: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44 },
-  handle: { color: '#fff', fontWeight: '800', fontSize: 16, ...shadow },
-  follow: { borderWidth: 1, borderColor: colors.gold, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: 'rgba(0,0,0,0.35)' },
-  following: { backgroundColor: 'rgba(246,198,111,0.25)' },
-  followText: { color: colors.gold, fontWeight: '800' },
-  caption: { color: '#fff', marginTop: 8, fontSize: 15, lineHeight: 20, ...shadow },
-  tagline: { color: colors.cream, marginTop: 4, fontSize: 12, fontWeight: '700', ...shadow },
-  actions: { position: 'absolute', right: 8, bottom: 22, gap: 12, alignItems: 'center' },
+  topShade: { position: 'absolute', top: 0, left: 0, right: 0, height: 140 },
+  bottomShade: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 280 },
+  track: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 2, backgroundColor: 'rgba(255,255,255,0.18)' },
+  progress: { height: 2, backgroundColor: colors.cream },
+  mute: { position: 'absolute', top: 56, right: 16, backgroundColor: 'rgba(0,0,0,0.35)', borderRadius: 18, width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  pause: { position: 'absolute', alignSelf: 'center', top: '42%' },
+  heart: { position: 'absolute', alignSelf: 'center', top: '36%' },
+  body: { position: 'absolute', left: 16, right: 92, bottom: 22 },
+  handle: { color: '#fff', fontFamily: font.bold, fontSize: 16, ...shadow },
+  caption: { ...type.body, color: '#fff', marginTop: 6, ...shadow },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
+  chip: { ...type.caption, color: '#fff', backgroundColor: 'rgba(255,255,255,0.18)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, overflow: 'hidden' },
+  actions: { position: 'absolute', right: 10, bottom: 20, alignItems: 'center', gap: 16 },
+  avatarWrap: { alignItems: 'center', marginBottom: 6 },
+  avatarRing: { borderWidth: 1.5, borderColor: '#fff', borderRadius: 26, padding: 1 },
+  follow: { position: 'absolute', bottom: -9, width: 22, height: 22, borderRadius: 11, backgroundColor: colors.like, alignItems: 'center', justifyContent: 'center' },
+  following: { backgroundColor: colors.gold },
+  rail: { alignItems: 'center', minWidth: 48, minHeight: 48, justifyContent: 'center' },
+  iconShadow: { textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 6 },
+  railText: { color: '#fff', fontFamily: font.semibold, fontSize: 12, marginTop: 2, ...shadow },
 });

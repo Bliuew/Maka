@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Text, TextInput, View } from 'react-native';
+import { View } from 'react-native';
+import { Text, TextInput } from '../../components/Text';
 import { Button, Card, Empty, Loading, Metrics, P, Row, Screen, SectionTitle, Tag, useLoad, styles as ui } from '../../components/ui';
 import { api } from '../../lib/client';
 import { useSession } from '../../lib/session';
@@ -23,7 +24,7 @@ export default function Admin() {
   if (!data) return <Loading error={error} onRetry={reload} />;
   const act = (fn: () => Promise<unknown>, msg: string) => async () => { try { await fn(); toast.show(msg); reload(); } catch (e) { toast.error(e); } };
   return (
-    <Screen eyebrow="Trust & Safety" title="Moderation" intro="Every action is logged and can be appealed. Appeals must be decided by a different reviewer." onRefresh={() => reload(true)} refreshing={refreshing}>
+    <Screen title="Moderation" intro="Every action is logged. Appeals go to a different reviewer." onRefresh={() => reload(true)} refreshing={refreshing}>
       <Metrics items={[[String(data.o.openReports), 'Open reports'], [String(data.o.openAppeals), 'Appeals'], [String(data.o.pendingBusinesses), 'Businesses']]} />
       <SectionTitle>Report queue (highest risk first)</SectionTitle>
       {data.reports.length ? data.reports.map((r: any) => (

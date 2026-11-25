@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Text, TextInput } from '../../../components/Text';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { Button, Loading, styles as ui } from '../../../components/ui';
+import { Button, Icon, Loading, styles as ui } from '../../../components/ui';
 import { ReportSheet } from '../../../components/post';
 import { api } from '../../../lib/client';
 import { ago } from '../../../core/format';
@@ -62,12 +63,16 @@ export default function Thread() {
   if (!msgs || !conv) return <Loading error={error} onRetry={load} />;
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.app }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={90}>
-      <Stack.Screen options={{ title: conv.title, headerRight: () => conv.isGroup
-        ? <Button title="Leave" small variant="secondary" onPress={async () => { await api.post(`/api/conversations/${id}/leave`); router.back(); }} />
-        : <Button title="Profile" small variant="secondary" onPress={() => router.push(`/u/${conv.members[0].handle}`)} /> }} />
+      <Stack.Screen options={{ title: conv.title, headerRight: () => (
+        <Pressable hitSlop={10} accessibilityRole="button" style={{ padding: 6 }}
+          accessibilityLabel={conv.isGroup ? 'Leave group' : `View @${conv.members[0].handle}’s profile`}
+          onPress={conv.isGroup ? async () => { await api.post(`/api/conversations/${id}/leave`); router.back(); } : () => router.push(`/u/${conv.members[0].handle}`)}>
+          <Icon name={conv.isGroup ? 'exit-outline' : 'person-circle-outline'} size={26} />
+        </Pressable>
+      ) }} />
       <FlatList ref={list} data={msgs} keyExtractor={(m) => m.id} contentContainerStyle={{ padding: 14, gap: 8 }}
         onContentSizeChange={() => list.current?.scrollToEnd({ animated: false })}
-        ListEmptyComponent={<Text style={ui.muted}>Say hello 👋</Text>}
+        ListEmptyComponent={<Text style={ui.muted}>Say hello</Text>}
         accessibilityLabel="Messages"
         renderItem={({ item: m }) => (
           <View style={[s.bubble, m.mine && s.me, m.status === 'held' && s.held]} accessible accessibilityLabel={`${m.mine ? 'You' : '@' + m.sender.handle}: ${m.body}. ${ago(m.createdAt)}${m.status === 'held' ? '. Held for review, not delivered' : ''}`} testID="bubble">

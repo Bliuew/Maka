@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { Text } from '../../../components/Text';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Button, Card, Empty, Loading, P, Pills, Screen, SearchBox, Tag, useLoad } from '../../../components/ui';
@@ -14,7 +15,7 @@ export default function Market() {
   useEffect(() => { const t = setTimeout(() => setTerm(q), 250); return () => clearTimeout(t); }, [q]);
   const { data, error, reload, refreshing } = useLoad(() => api.get(`/api/market/businesses?q=${encodeURIComponent(term)}&category=${encodeURIComponent(cat)}`), [term, cat]);
   return (
-    <Screen eyebrow="Discover · connect · grow" title="🛍 Mäka Market" intro="Shop verified independent businesses and established brands." onRefresh={() => reload(true)} refreshing={refreshing}>
+    <Screen title="Market" intro="Shop verified independent businesses." onRefresh={() => reload(true)} refreshing={refreshing}>
       <SearchBox value={q} onChange={setQ} />
       {!data ? <Loading error={error} onRetry={reload} /> : (
         <>
@@ -36,7 +37,7 @@ export default function Market() {
       <Card style={{ marginTop: 16 }}>
         <Text style={{ color: colors.gold, fontWeight: '800' }}>Sell on Mäka</Text>
         <P>Register your business for verification, then open a storefront and post creator campaigns.</P>
-        <Button title="Business tools →" variant="secondary" small onPress={() => router.push('/studio')} />
+        <Button title="Business tools" icon="storefront-outline" variant="secondary" small onPress={() => router.push('/studio')} />
       </Card>
     </Screen>
   );

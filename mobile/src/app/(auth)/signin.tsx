@@ -16,7 +16,7 @@ export default function SignIn() {
     catch (e) { toast.error(e); }
   };
   return (
-    <Screen title="Welcome back" right={<Button title="← Back" small variant="secondary" onPress={() => router.back()} />}>
+    <Screen title="Welcome back" right={<Button title="Back" icon="chevron-back" small variant="ghost" onPress={() => router.back()} />}>
       <Field label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" autoComplete="email" testID="si-email" />
       <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry autoComplete="current-password" testID="si-pass" onSubmitEditing={submit} />
       <Button title="Sign in" block onPress={submit} testID="si-submit" />

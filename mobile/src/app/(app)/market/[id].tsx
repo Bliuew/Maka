@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { Text } from '../../../components/Text';
 import { Image } from 'expo-image';
 import { useLocalSearchParams } from 'expo-router';
 import { Banner, Button, Loading, P, Row, Screen, Sheet, Tag, useLoad } from '../../../components/ui';
@@ -52,7 +53,7 @@ export default function Storefront() {
           <>
             <P><Text style={{ fontWeight: '800' }}>Order {result.order.orderId}</Text> saved · {money(result.order.totalCents, result.order.currency)}</P>
             <Banner>{result.message}</Banner>
-            <P muted>You can find it under Settings → Orders, and cancel it at any time.</P>
+            <P muted>You can find it in Settings & safety under Orders, and cancel it at any time.</P>
             <Button title="OK" variant="secondary" block onPress={() => { setBag(false); setResult(null); }} />
           </>
         ) : (

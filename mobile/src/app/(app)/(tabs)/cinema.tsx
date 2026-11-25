@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { Text } from '../../../components/Text';
 import { Image } from 'expo-image';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { Banner, Button, Empty, Loading, P, Pills, Row, Screen, SectionTitle, Sheet, useLoad } from '../../../components/ui';
@@ -41,7 +42,7 @@ export default function Cinema() {
     </Pressable>
   );
   return (
-    <Screen eyebrow="Free to watch · no subscription" title="🎬 Mäka Cinema" intro={`Films and shows are free with ads, wherever we hold the rights for your region (${data.territory}).`} onRefresh={() => reload(true)} refreshing={refreshing}>
+    <Screen title="Cinema" intro={`Free with ads · no subscription · titles licensed for ${data.territory}`} onRefresh={() => reload(true)} refreshing={refreshing}>
       <Pills label="Type" value={f.list ? 'watchlist' : f.kind} onChange={(v) => setF(v === 'watchlist' ? { ...f, list: f.list ? '' : 'watchlist' } : { ...f, kind: v, list: '' })}
         options={[{ value: '', label: 'All' }, { value: 'movie', label: 'Movies' }, { value: 'series', label: 'Series' }, { value: 'documentary', label: 'Documentaries' }, { value: 'watchlist', label: 'My List' }]} />
       <Pills label="Genre" value={f.genre} onChange={(v) => setF({ ...f, genre: v })} options={[{ value: '', label: 'Any genre' }, ...data.genres.map((g: string) => ({ value: g, label: g }))]} />
@@ -63,8 +64,8 @@ export default function Cinema() {
             <P>{open.synopsis}</P>
             {open.availability.playable ? null : <Banner>{open.availability.message}</Banner>}
             <Row wrap>
-              <Button title={open.availability.playable ? '▶ Watch free' : '▶ Not available'} disabled={!open.availability.playable} onPress={play} testID="play-title" />
-              <Button title={open.inWatchlist ? '✓ In My List' : '+ My List'} variant="secondary" onPress={watchlist} testID="watchlist" />
+              <Button title={open.availability.playable ? 'Watch free' : 'Not available'} icon="play" disabled={!open.availability.playable} onPress={play} testID="play-title" />
+              <Button title={open.inWatchlist ? 'In My List' : 'My List'} icon={open.inWatchlist ? 'checkmark' : 'add'} variant="secondary" onPress={watchlist} testID="watchlist" />
             </Row>
           </>
         ) : null}

@@ -22,7 +22,7 @@ export default function SignUp() {
     } catch (e) { toast.error(e); }
   };
   return (
-    <Screen title="Join Mäka" intro="Strictly for adults aged 19+. Your public handle can differ from your legal name." right={<Button title="← Back" small variant="secondary" onPress={() => router.back()} />}>
+    <Screen title="Join Mäka" intro="Strictly for adults 19+. Your handle can differ from your legal name." right={<Button title="Back" icon="chevron-back" small variant="ghost" onPress={() => router.back()} />}>
       <Field label="Email" value={f.email} onChangeText={up('email')} autoCapitalize="none" keyboardType="email-address" autoComplete="email" testID="su-email" />
       <Field label="Password (10+ characters)" value={f.password} onChangeText={up('password')} secureTextEntry autoComplete="new-password" testID="su-pass" />
       <Field label="Handle" value={f.handle} onChangeText={up('handle')} autoCapitalize="none" autoCorrect={false} placeholder="yourname" testID="su-handle" />

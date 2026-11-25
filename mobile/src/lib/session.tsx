@@ -55,7 +55,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       onOpen: () => { emit('realtime:open'); refreshUnread(); },
       message: (m) => { emit('message', m); setUnread((u) => u + 1); },
       notification: (n) => { emit('notification', n); setUnread((u) => u + 1); toastRef.current.show(n.text); },
-      post_status: (s) => { emit('post_status', s); toastRef.current.show(s.status === 'published' ? 'Your post is live 🎉' : 'Your upload could not be processed: ' + (s.error || ''), s.status !== 'published'); },
+      post_status: (s) => { emit('post_status', s); toastRef.current.show(s.status === 'published' ? 'Your post is live' : 'Your upload could not be processed: ' + (s.error || ''), s.status !== 'published'); },
       media_status: (s) => emit('media_status', s),
     });
   }, [verified, refreshUnread]);

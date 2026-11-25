@@ -1,13 +1,13 @@
 // Post interactions shared by the feed, single-post view and profiles:
 // like, save, follow, share, comments, report / report-and-block, mute, block.
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, Share, Text, View } from 'react-native';
+import { Alert, Share, View } from 'react-native';
+import { Text } from './Text';
 import { useRouter } from 'expo-router';
 import { api } from '../lib/client';
 import { useSession } from '../lib/session';
 import { useToast } from '../lib/toast';
 import { ago } from '../core/format';
-import { colors } from '../lib/theme';
 import { Avatar, Banner, Button, Check, Choice, Empty, Field, P, Row, Sheet, Tag, styles } from './ui';
 
 export type Post = any;
@@ -67,7 +67,7 @@ export function CommentsSheet({ postId, visible, onClose, onCountChange }: { pos
               <Text style={styles.liTitle}>@{c.author.handle} <Text style={styles.muted}>· {ago(c.createdAt)}</Text></Text>
               <Row>
                 {c.canDelete ? <Button title="Delete" small variant="secondary" onPress={() => del(c.id)} label="Delete comment" /> : null}
-                {!c.mine ? <Button title="⚑" small variant="secondary" onPress={() => setReportId(c.id)} label={`Report comment by @${c.author.handle}`} /> : null}
+                {!c.mine ? <Button title="Report" icon="flag-outline" small variant="ghost" onPress={() => setReportId(c.id)} label={`Report comment by @${c.author.handle}`} /> : null}
               </Row>
             </Row>
             <P>{c.body}</P>
@@ -163,7 +163,7 @@ function MoreBody({ post, onClose, onChanged }: { post: Post; onClose: () => voi
         )) : (
           <View style={{ gap: 4 }}>
             <Button title="Not interested" variant="secondary" block onPress={act(async () => { await api.post(`/api/posts/${post.id}/not-interested`); toast.show('We’ll show you less like this'); onChanged('hidden'); onClose(); })} />
-            <Button title="⚑ Report post" variant="secondary" block onPress={() => setReport(true)} testID="report-post" />
+            <Button title="Report post" icon="flag-outline" variant="secondary" block onPress={() => setReport(true)} testID="report-post" />
             <Button title={`Mute @${post.author.handle}`} variant="secondary" block onPress={act(async () => { await api.post(`/api/users/${post.author.id}/mute`); toast.show('Muted. You won’t see their posts or comments.'); onChanged('hidden'); onClose(); })} />
             <Button title={`Block @${post.author.handle}`} variant="danger" block onPress={() => confirm(`Block @${post.author.handle}?`, 'They won’t be able to see your posts, comment, follow or message you.',
               act(async () => { await api.post(`/api/users/${post.author.id}/block`); toast.show(`Blocked @${post.author.handle}`); onChanged('hidden'); onClose(); }))} />
@@ -177,13 +177,4 @@ function MoreBody({ post, onClose, onChanged }: { post: Post; onClose: () => voi
   );
 }
 
-export function ActionButton({ glyph, label, text, on, onPress, testID }: { glyph: string; label: string; text: string; on?: boolean; onPress: () => void; testID?: string }) {
-  return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} accessibilityState={on === undefined ? undefined : { selected: on }} testID={testID}
-      style={{ alignItems: 'center', minWidth: 48, minHeight: 48, justifyContent: 'center' }} hitSlop={6}>
-      <Text style={{ fontSize: 28, color: on ? colors.gold : '#fff', textShadowColor: '#000', textShadowRadius: 6 }}>{glyph}</Text>
-      <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800', textShadowColor: '#000', textShadowRadius: 4 }}>{text}</Text>
-    </Pressable>
-  );
-}
 

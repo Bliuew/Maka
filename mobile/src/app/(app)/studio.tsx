@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
+import { Text } from '../../components/Text';
 import { useRouter } from 'expo-router';
 import { Avatar, Banner, Button, Card, Empty, Field, ListItem, Loading, Metrics, P, Row, Screen, SectionTitle, Sheet, Tag, useLoad } from '../../components/ui';
 import { api } from '../../lib/client';
@@ -30,7 +31,7 @@ export default function Studio() {
   );
 
   return (
-    <Screen eyebrow="Creator Studio" title="Your studio" intro={s.eligibility} onRefresh={() => reload(true)} refreshing={refreshing}>
+    <Screen title="Studio" intro="Every verified creator is eligible — no follower minimums, no tiers." onRefresh={() => reload(true)} refreshing={refreshing}>
       <Metrics items={[[count(s.totals.views), 'Views'], [count(s.totals.likes), 'Likes'], [count(s.totals.comments), 'Comments']]} />
       <SectionTitle>Earnings</SectionTitle>
       <Card>

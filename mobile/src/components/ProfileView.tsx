@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Text } from './Text';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { Avatar, Button, Card, Field, Loading, Metrics, P, Row, Screen, SectionTitle, Sheet, Tag, useLoad } from './ui';
+import { Avatar, Button, Card, Field, Icon, Loading, Metrics, P, Row, Screen, SectionTitle, Sheet, Tag, useLoad } from './ui';
 import { ReportSheet } from './post';
 import { api, media } from '../lib/client';
 import { count } from '../core/format';
@@ -61,27 +62,27 @@ export default function ProfileView({ userKey }: { userKey: string }) {
           <Row wrap>
             {u.isSample ? <Tag tone="grey">Sample account</Tag> : null}
             {data.banned ? <Tag tone="red">Account removed</Tag> : null}
-            {own ? <Tag tone="green">✓ 19+ verified</Tag> : u.followsYou ? <Tag tone="grey">Follows you</Tag> : null}
+            {own ? <Tag tone="green">19+ verified</Tag> : u.followsYou ? <Tag tone="grey">Follows you</Tag> : null}
           </Row>
         </View>
       </Row>
       {u.bio ? <P>{u.bio}</P> : null}
       <Metrics items={[[count(u.posts), 'Posts'], [count(u.followers), 'Followers'], [count(u.following), 'Following']]} />
       <P muted>Follower counts are public, but never decide earnings, collaborations or who gets recommended.</P>
-      <Row wrap style={{ marginTop: 8 }}>
+      <Row style={{ marginTop: 4, alignItems: 'flex-end' }}>
         {own ? (
           <>
-            <Button title="Edit profile" variant="secondary" onPress={() => { setName(u.displayName); setBio(u.bio); setAvatar(null); setEdit(true); }} />
-            <Button title="Creator Studio" variant="secondary" onPress={() => router.push('/studio')} />
-            <Button title="Settings & safety" variant="secondary" onPress={() => router.push('/settings')} testID="open-settings" />
+            <View style={{ flex: 1 }}><Button title="Edit profile" variant="secondary" small block onPress={() => { setName(u.displayName); setBio(u.bio); setAvatar(null); setEdit(true); }} /></View>
+            <View style={{ flex: 1 }}><Button title="Studio" variant="secondary" small block onPress={() => router.push('/studio')} /></View>
+            <View style={{ marginTop: 14 }}><Button title="" icon="settings-outline" label="Settings and safety" variant="secondary" small onPress={() => router.push('/settings')} testID="open-settings" /></View>
           </>
         ) : u.isBlocked ? (
           <Button title="Unblock" variant="secondary" onPress={act(async () => { await api.del(`/api/users/${u.id}/block`); toast.show('Unblocked'); reload(); })} />
         ) : (
           <>
-            <Button title={u.isFollowing ? 'Following' : '+ Follow'} onPress={follow} label={u.isFollowing ? `Unfollow @${u.handle}` : `Follow @${u.handle}`} />
-            <Button title="Message" variant="secondary" onPress={act(async () => { const r = await api.post('/api/conversations', { memberIds: [u.id] }); router.push(`/inbox/${r.id}`); })} />
-            <Button title="⋯" variant="secondary" label="More options" onPress={() => setMore(true)} testID="user-more" />
+            <View style={{ flex: 1 }}><Button title={u.isFollowing ? 'Following' : 'Follow'} variant={u.isFollowing ? 'secondary' : 'primary'} small block onPress={follow} label={u.isFollowing ? `Unfollow @${u.handle}` : `Follow @${u.handle}`} /></View>
+            <View style={{ flex: 1 }}><Button title="Message" variant="secondary" small block onPress={act(async () => { const r = await api.post('/api/conversations', { memberIds: [u.id] }); router.push(`/inbox/${r.id}`); })} /></View>
+            <View style={{ marginTop: 14 }}><Button title="" icon="ellipsis-horizontal" variant="secondary" small label="More options" onPress={() => setMore(true)} testID="user-more" /></View>
           </>
         )}
       </Row>
@@ -92,7 +93,7 @@ export default function ProfileView({ userKey }: { userKey: string }) {
             <Pressable key={p.id} style={s.thumb} onPress={() => router.push(`/p/${p.id}`)} accessibilityRole="button" accessibilityLabel={`Open post: ${p.caption.slice(0, 60) || 'Untitled'}. ${p.views} views`} testID="thumb">
               {media(p.posterUrl) ? <Image source={{ uri: media(p.posterUrl)! }} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
               {p.status !== 'published' ? <Text style={s.badge}>{p.status}</Text> : null}
-              <Text style={s.views}>▶ {count(p.views)}</Text>
+              <View style={s.viewsRow}><Icon name="play" size={12} color="#fff" /><Text style={s.views}>{count(p.views)}</Text></View>
             </Pressable>
           ))}
         </View>
@@ -100,7 +101,7 @@ export default function ProfileView({ userKey }: { userKey: string }) {
         <Card><P muted style={{ textAlign: 'center' }}>{own ? 'Your posts will appear here.' : 'No posts yet.'}</P>{own ? <Button title="Create your first post" onPress={() => router.navigate('/create')} /> : null}</Card>
       )}
       <Sheet visible={more} title={'@' + u.handle} onClose={() => setMore(false)}>
-        <Button title="⚑ Report account" variant="secondary" block onPress={() => setReport(true)} testID="report-account" />
+        <Button title="Report account" icon="flag-outline" variant="secondary" block onPress={() => setReport(true)} testID="report-account" />
         <Button title={u.isMuted ? 'Unmute' : 'Mute'} variant="secondary" block onPress={act(async () => {
           if (u.isMuted) await api.del(`/api/users/${u.id}/mute`); else await api.post(`/api/users/${u.id}/mute`);
           setMore(false); toast.show(u.isMuted ? 'Unmuted' : 'Muted. You won’t see their posts or comments.'); reload();
@@ -111,7 +112,7 @@ export default function ProfileView({ userKey }: { userKey: string }) {
       <Sheet visible={edit} title="Edit profile" onClose={() => setEdit(false)}>
         <Field label="Display name" value={name} onChangeText={setName} maxLength={40} />
         <Field label="Bio" value={bio} onChangeText={setBio} maxLength={200} multiline />
-        <View style={{ marginTop: 12 }}><Button title={avatar ? 'Photo selected ✓' : 'Choose profile photo'} variant="secondary" small onPress={pickAvatar} /></View>
+        <View style={{ marginTop: 12 }}><Button title={avatar ? 'Photo selected' : 'Choose profile photo'} icon={avatar ? 'checkmark-circle' : 'image-outline'} variant="secondary" small onPress={pickAvatar} /></View>
         <Button title="Save profile" block onPress={saveProfile} />
       </Sheet>
     </Screen>
@@ -122,6 +123,7 @@ const s = StyleSheet.create({
   name: { color: colors.text, fontSize: 21, fontWeight: '800' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
   thumb: { width: '32.5%', aspectRatio: 9 / 16, backgroundColor: colors.pane2, borderRadius: 8, overflow: 'hidden', justifyContent: 'flex-end' },
-  views: { color: '#fff', fontWeight: '800', fontSize: 12, padding: 6, textShadowColor: '#000', textShadowRadius: 4 },
+  viewsRow: { flexDirection: 'row', alignItems: 'center', gap: 3, padding: 6 },
+  views: { color: '#fff', fontWeight: '600', fontSize: 12, textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 4 },
   badge: { position: 'absolute', top: 6, left: 6, color: colors.onGold, backgroundColor: colors.gold, borderRadius: 6, paddingHorizontal: 6, fontSize: 11, fontWeight: '800', overflow: 'hidden' },
 });

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { Text } from '../../../components/Text';
 import { useIsFocused, useRouter } from 'expo-router';
 import FeedItem from '../../../components/FeedItem';
 import { CommentsSheet, MoreSheet, usePostActions, type Post } from '../../../components/post';
@@ -64,6 +65,7 @@ export default function Feed() {
       {(['following', 'foryou'] as Mode[]).map((m) => (
         <Pressable key={m} onPress={() => switchMode(m)} accessibilityRole="tab" accessibilityState={{ selected: mode === m }} accessibilityLabel={m === 'foryou' ? 'For You' : 'Following'} testID={`mode-${m}`}>
           <Text style={[s.tab, mode === m && s.tabOn]}>{m === 'foryou' ? 'For You' : 'Following'}</Text>
+          <View style={[s.indicator, mode !== m && { opacity: 0 }]} />
         </Pressable>
       ))}
     </View>
@@ -110,9 +112,10 @@ export default function Feed() {
 }
 
 const s = StyleSheet.create({
-  tabs: { position: 'absolute', top: 12, alignSelf: 'center', flexDirection: 'row', gap: 22, zIndex: 2 },
-  tab: { color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: 16, paddingVertical: 6, textShadowColor: '#000', textShadowRadius: 6 },
-  tabOn: { color: '#fff', borderBottomWidth: 2, borderBottomColor: colors.gold },
+  tabs: { position: 'absolute', top: 10, alignSelf: 'center', flexDirection: 'row', gap: 26, zIndex: 2 },
+  tab: { color: 'rgba(255,255,255,0.62)', fontWeight: '600', fontSize: 16, paddingTop: 6, textAlign: 'center', textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 6 },
+  tabOn: { color: '#fff', fontWeight: '700' },
+  indicator: { alignSelf: 'center', width: 22, height: 3, borderRadius: 2, backgroundColor: '#fff', marginTop: 5 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16, backgroundColor: colors.app },
   emptyText: { color: colors.muted, textAlign: 'center', lineHeight: 21 },
 });

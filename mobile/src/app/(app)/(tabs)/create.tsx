@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Platform, Text, View } from 'react-native';
+import { Platform, View } from 'react-native';
+import { Text } from '../../../components/Text';
 import * as ImagePicker from 'expo-image-picker';
 import { File } from 'expo-file-system';
 import { Image } from 'expo-image';
@@ -80,7 +81,7 @@ export default function Create() {
       const s = await waitForMedia(api, mediaId);
       if (s.status !== 'ready') throw new Error('Your file could not be processed: ' + (s.error || 'unknown error'));
       if (r.post.status === 'draft') { toast.show('Draft saved to Creator Studio'); router.push('/studio'); return; }
-      toast.show('Posted! 🎉');
+      toast.show('Posted');
       setPicked(null); setCaption(''); setAltText(''); setVtt(null); setOriginal(false);
       router.push(`/p/${r.post.id}`);
     } catch (e: any) {
@@ -92,13 +93,13 @@ export default function Create() {
 
   const busy = progress !== null;
   return (
-    <Screen eyebrow="Your voice matters" title="Create" intro="Share an original video or photo. No follower-based tiers — every creator starts on equal footing.">
+    <Screen title="New post" intro="Share an original video or photo.">
       {pending && !busy ? (
         <Banner>An upload didn’t finish{pending.state ? ` (${Math.round((pending.state.received / pending.size) * 100)}% sent)` : ''}. You can resume it without starting over.
           {'\n'}<Text style={{ color: colors.gold, fontWeight: '800' }} onPress={() => submit(!!pending.form.draft, pending)} accessibilityRole="button">Resume upload</Text>
           {'   '}<Text style={{ color: colors.muted }} onPress={() => { setPending(null); setPendingState(null); }} accessibilityRole="button">Discard</Text></Banner>
       ) : null}
-      <Pills label="Post type" value={kind} onChange={(v) => { setKind(v); setPicked(null); }} options={[{ value: 'video', label: '▸ Video' }, { value: 'image', label: '▧ Photo' }]} />
+      <Pills label="Post type" value={kind} onChange={(v) => { setKind(v); setPicked(null); }} options={[{ value: 'video', label: 'Video' }, { value: 'image', label: 'Photo' }]} />
       <Row wrap>
         <Button title={kind === 'video' ? 'Record video' : 'Take photo'} onPress={() => pick('camera')} disabled={busy || Platform.OS === 'web'} />
         <Button title="Choose from library" variant="secondary" onPress={() => pick('library')} disabled={busy} testID="pick-library" />
@@ -107,7 +108,7 @@ export default function Create() {
         <Image source={{ uri: picked.uri }} style={{ width: '100%', height: 260, borderRadius: 14, marginTop: 10 }} contentFit="contain" accessibilityLabel="Selected photo preview" />) : null}
       <Field label="Caption" value={caption} onChangeText={setCaption} multiline maxLength={2200} placeholder="Tell your story… #hashtags" testID="caption" />
       <Field label="Description for screen readers" value={altText} onChangeText={setAltText} maxLength={300} placeholder="What happens in the video or photo" />
-      {kind === 'video' ? <View style={{ marginTop: 10 }}><Button title={captionsVtt ? 'Captions attached ✓' : 'Add captions file (.vtt, optional)'} small variant="secondary" onPress={pickCaptions} /></View> : null}
+      {kind === 'video' ? <View style={{ marginTop: 10 }}><Button title={captionsVtt ? 'Captions attached' : 'Add captions (.vtt)'} icon={captionsVtt ? 'checkmark-circle' : 'text-outline'} small variant="secondary" onPress={pickCaptions} /></View> : null}
       <Choice label="Who can stitch or remix this" value={remixPolicy} onChange={setRemix} options={[
         { value: 'followers', label: 'Followers' }, { value: 'everyone', label: 'Everyone' }, { value: 'nobody', label: 'Nobody' }]} />
       <Check label="Allow comments" value={allowComments} onChange={setAllowComments} />

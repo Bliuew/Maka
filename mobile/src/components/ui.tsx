@@ -1,16 +1,24 @@
-// Shared UI building blocks. Every touchable carries an accessibility role and label.
+// Mäka UI kit. Every touchable carries an accessibility role and label.
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView,
-  StyleSheet, Text, TextInput, View, type TextInputProps, type ViewStyle, type StyleProp,
+  ActivityIndicator, Animated, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView,
+  StyleSheet, View, type StyleProp, type TextInputProps, type ViewStyle,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { Image } from 'expo-image';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, radius } from '../lib/theme';
+import { Text, TextInput } from './Text';
+import { colors, font, radius, type } from '../lib/theme';
 import { on } from '../lib/events';
 import { initial } from '../core/format';
 import { media } from '../lib/client';
+
+export { Text, TextInput };
+export type IconName = React.ComponentProps<typeof Ionicons>['name'];
+export const Icon = ({ name, size = 22, color = colors.text, style }: { name: IconName; size?: number; color?: string; style?: any }) => (
+  <Ionicons name={name} size={size} color={color} style={style} accessible={false} importantForAccessibility="no" />
+);
 
 // ---------- data loading ----------
 /** Load data when the screen gains focus and when the network returns; supports pull-to-refresh. */
@@ -34,23 +42,22 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[] = []) {
 }
 
 // ---------- layout ----------
-export function Screen({ children, title, eyebrow, intro, onRefresh, refreshing, scroll = true, right, style }: {
+export function Screen({ children, title, intro, onRefresh, refreshing, scroll = true, right, style }: {
   children: React.ReactNode; title?: string; eyebrow?: string; intro?: string; onRefresh?: () => void; refreshing?: boolean;
   scroll?: boolean; right?: React.ReactNode; style?: StyleProp<ViewStyle>;
 }) {
   const head = title ? (
     <View style={styles.pagehead}>
       <View style={{ flex: 1 }}>
-        {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
-        <Text style={styles.h1} accessibilityRole="header">{title}</Text>
-        {intro ? <Text style={styles.intro}>{intro}</Text> : null}
+        <Text style={type.largeTitle} accessibilityRole="header">{title}</Text>
+        {intro ? <Text style={[type.callout, { color: colors.muted, marginTop: 6 }]}>{intro}</Text> : null}
       </View>
       {right}
     </View>
   ) : null;
   if (!scroll) return <View style={[styles.screen, style]}>{head}{children}</View>;
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={[{ paddingBottom: 40 }, style]} keyboardShouldPersistTaps="handled"
+    <ScrollView style={styles.screen} contentContainerStyle={[{ paddingBottom: 48 }, style]} keyboardShouldPersistTaps="handled"
       refreshControl={onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={colors.gold} /> : undefined}>
       {head}
       <View style={styles.pad}>{children}</View>
@@ -58,36 +65,60 @@ export function Screen({ children, title, eyebrow, intro, onRefresh, refreshing,
   );
 }
 
+/** Skeleton placeholder while content loads (or an error with retry). */
 export function Loading({ error, onRetry }: { error?: string | null; onRetry?: () => void }) {
+  const [pulse] = useState(() => new Animated.Value(0.45));
+  useEffect(() => {
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(pulse, { toValue: 0.9, duration: 650, useNativeDriver: true }),
+      Animated.timing(pulse, { toValue: 0.45, duration: 650, useNativeDriver: true }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
+  if (error) {
+    return (
+      <View style={styles.center}>
+        <Icon name="cloud-offline-outline" size={40} color={colors.faint} />
+        <Text style={[type.headline, { marginTop: 12 }]}>Couldn’t load this</Text>
+        <Text style={[type.callout, { color: colors.muted, textAlign: 'center', marginTop: 4, marginBottom: 16 }]}>{error}</Text>
+        {onRetry ? <Button title="Try again" variant="secondary" onPress={onRetry} /> : null}
+      </View>
+    );
+  }
   return (
-    <View style={styles.center}>
-      {error ? (
-        <>
-          <Text style={styles.muted}>Couldn’t load this screen.</Text>
-          <Text style={[styles.muted, { marginVertical: 8 }]}>{error}</Text>
-          {onRetry ? <Button title="Try again" variant="secondary" onPress={onRetry} /> : null}
-        </>
-      ) : <ActivityIndicator color={colors.gold} accessibilityLabel="Loading" />}
+    <View style={[styles.screen, { padding: 16 }]} accessibilityLabel="Loading" accessibilityRole="progressbar">
+      <ActivityIndicator style={{ position: 'absolute', opacity: 0 }} />
+      {[0.55, 0.9, 0.75, 0.6].map((w, i) => (
+        <Animated.View key={i} style={{ opacity: pulse, marginBottom: 18 }}>
+          <View style={{ height: i === 0 ? 28 : 72, width: i === 0 ? `${w * 100}%` : '100%', borderRadius: radius.md, backgroundColor: colors.pane2 }} />
+        </Animated.View>
+      ))}
     </View>
   );
 }
 
 export const SectionTitle = ({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) => (
-  <View style={styles.sectionRow}><Text style={styles.section} accessibilityRole="header">{children}</Text>{right}</View>
+  <View style={styles.sectionRow}><Text style={type.headline} accessibilityRole="header">{children}</Text>{right}</View>
 );
 export const P = ({ children, muted, style }: { children: React.ReactNode; muted?: boolean; style?: any }) => (
-  <Text style={[styles.p, muted && styles.muted, style]}>{children}</Text>
+  <Text style={[type.body, { marginVertical: 4 }, muted && { color: colors.muted, ...type.callout }, style]}>{children}</Text>
 );
 export const Row = ({ children, style, wrap }: { children: React.ReactNode; style?: StyleProp<ViewStyle>; wrap?: boolean }) => (
   <View style={[styles.row, wrap && { flexWrap: 'wrap' }, style]}>{children}</View>
 );
 export const Card = ({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) => <View style={[styles.card, style]}>{children}</View>;
-export const Empty = ({ children }: { children: React.ReactNode }) => <Text style={[styles.muted, { marginVertical: 8 }]}>{children}</Text>;
+export const Empty = ({ children, icon = 'sparkles-outline' }: { children: React.ReactNode; icon?: IconName }) => (
+  <View style={styles.empty}>
+    <Icon name={icon} size={22} color={colors.faint} />
+    <Text style={[type.callout, { color: colors.muted, flex: 1 }]}>{children}</Text>
+  </View>
+);
 
 // ---------- controls ----------
-export function Button({ title, onPress, variant = 'primary', disabled, small, block, label, testID, busy: busyProp }: {
-  title: string; onPress?: () => unknown; variant?: 'primary' | 'secondary' | 'danger'; disabled?: boolean; small?: boolean; block?: boolean;
-  label?: string; testID?: string; busy?: boolean;
+export function Button({ title, onPress, variant = 'primary', disabled, small, block, label, testID, busy: busyProp, icon }: {
+  title: string; onPress?: () => unknown; variant?: 'primary' | 'secondary' | 'danger' | 'ghost'; disabled?: boolean; small?: boolean; block?: boolean;
+  label?: string; testID?: string; busy?: boolean; icon?: IconName;
 }) {
   const [busy, setBusy] = useState(false);
   const isBusy = busy || !!busyProp;
@@ -99,22 +130,31 @@ export function Button({ title, onPress, variant = 'primary', disabled, small, b
       try { await r; } catch { /* caller shows errors */ } finally { setBusy(false); }
     }
   };
+  const fg = variant === 'primary' ? colors.onGold : variant === 'danger' ? colors.red : variant === 'ghost' ? colors.gold : colors.text;
   return (
     <Pressable onPress={press} disabled={disabled || isBusy} accessibilityRole="button" accessibilityLabel={label || title}
       accessibilityState={{ disabled: !!(disabled || isBusy), busy: isBusy }} testID={testID}
-      style={({ pressed }) => [styles.btn, styles[variant], small && styles.btnSmall, block && { alignSelf: 'stretch', marginTop: 14 }, (disabled || isBusy) && { opacity: 0.5 }, pressed && { opacity: 0.8 }]}>
-      {isBusy ? <ActivityIndicator color={variant === 'primary' ? colors.onGold : colors.text} /> :
-        <Text style={[styles.btnText, variant === 'primary' && { color: colors.onGold }, small && { fontSize: 13 }]}>{title}</Text>}
+      style={({ pressed }) => [styles.btn, styles[variant], small && styles.btnSmall, block && { alignSelf: 'stretch', marginTop: 14 },
+        (disabled || isBusy) && { opacity: 0.45 }, pressed && { opacity: 0.75, transform: [{ scale: 0.985 }] }]}>
+      {isBusy ? <ActivityIndicator color={fg} /> : (
+        <View style={styles.row}>
+          {icon ? <Icon name={icon} size={small ? 16 : 18} color={fg} /> : null}
+          <Text style={[small ? styles.btnTextSmall : styles.btnText, { color: fg }]}>{title}</Text>
+        </View>
+      )}
     </Pressable>
   );
 }
 
 export function Field({ label, ...props }: TextInputProps & { label: string }) {
+  const [focused, setFocused] = useState(false);
   return (
-    <View style={{ marginTop: 12 }}>
+    <View style={{ marginTop: 14 }}>
       <Text style={styles.label} nativeID={'lbl-' + label}>{label}</Text>
-      <TextInput placeholderTextColor="#77737b" accessibilityLabel={label} accessibilityLabelledBy={'lbl-' + label}
-        {...props} style={[styles.field, props.multiline && { minHeight: 80, textAlignVertical: 'top' }, props.style]} />
+      <TextInput placeholderTextColor={colors.faint} accessibilityLabel={label} accessibilityLabelledBy={'lbl-' + label}
+        {...props}
+        onFocus={(e) => { setFocused(true); props.onFocus?.(e); }} onBlur={(e) => { setFocused(false); props.onBlur?.(e); }}
+        style={[styles.field, focused && styles.fieldFocus, props.multiline && { minHeight: 96, textAlignVertical: 'top', paddingTop: 12 }, props.style]} />
     </View>
   );
 }
@@ -122,57 +162,75 @@ export function Field({ label, ...props }: TextInputProps & { label: string }) {
 export function Check({ label, value, onChange, testID }: { label: string; value: boolean; onChange: (v: boolean) => void; testID?: string }) {
   return (
     <Pressable onPress={() => onChange(!value)} accessibilityRole="checkbox" accessibilityState={{ checked: value }} accessibilityLabel={label} testID={testID} style={styles.check}>
-      <View style={[styles.box, value && styles.boxOn]}>{value ? <Text style={{ color: colors.onGold, fontWeight: '900' }}>✓</Text> : null}</View>
-      <Text style={[styles.p, { flex: 1, marginVertical: 0 }]}>{label}</Text>
+      <View style={[styles.box, value && styles.boxOn]}>{value ? <Icon name="checkmark" size={16} color={colors.onGold} /> : null}</View>
+      <Text style={[type.callout, { flex: 1 }]}>{label}</Text>
     </Pressable>
   );
 }
 
+/** Single-choice list (radio rows), iOS settings style. */
 export function Choice<T extends string>({ options, value, onChange, label }: { options: { value: T; label: string; note?: string }[]; value: T; onChange: (v: T) => void; label: string }) {
   return (
-    <View accessibilityRole="radiogroup" accessibilityLabel={label} style={{ marginTop: 10, gap: 8 }}>
-      {options.map((o) => (
-        <Pressable key={o.value} onPress={() => onChange(o.value)} accessibilityRole="radio" accessibilityState={{ selected: value === o.value }}
-          accessibilityLabel={o.label + (o.note ? '. ' + o.note : '')} style={[styles.method, value === o.value && styles.methodOn]}>
-          <Text style={styles.methodTitle}>{o.label}</Text>
-          {o.note ? <Text style={styles.muted}>{o.note}</Text> : null}
-        </Pressable>
-      ))}
+    <View accessibilityRole="radiogroup" accessibilityLabel={label} style={styles.group}>
+      {options.map((o, i) => {
+        const on = value === o.value;
+        return (
+          <Pressable key={o.value || 'none'} onPress={() => onChange(o.value)} accessibilityRole="radio" accessibilityState={{ selected: on }}
+            accessibilityLabel={o.label + (o.note ? '. ' + o.note : '')}
+            style={({ pressed }) => [styles.option, i > 0 && styles.optionDivider, pressed && { backgroundColor: colors.pane3 }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={type.bodyStrong}>{o.label}</Text>
+              {o.note ? <Text style={[type.callout, { color: colors.muted, marginTop: 2 }]}>{o.note}</Text> : null}
+            </View>
+            <View style={[styles.radio, on && styles.radioOn]}>{on ? <View style={styles.radioDot} /> : null}</View>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
 
+/** Horizontal filter chips. */
 export function Pills<T extends string>({ options, value, onChange, label }: { options: { value: T; label: string }[]; value: T; onChange: (v: T) => void; label: string }) {
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 8 }} accessibilityLabel={label}>
-      {options.map((o) => (
-        <Pressable key={o.value || 'all'} onPress={() => onChange(o.value)} accessibilityRole="button" accessibilityState={{ selected: value === o.value }} accessibilityLabel={o.label}
-          style={[styles.pill, value === o.value && styles.pillOn]}>
-          <Text style={[styles.pillText, value === o.value && { color: colors.gold }]}>{o.label}</Text>
-        </Pressable>
-      ))}
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 10 }} accessibilityLabel={label}>
+      {options.map((o) => {
+        const on = value === o.value;
+        return (
+          <Pressable key={o.value || 'all'} onPress={() => onChange(o.value)} accessibilityRole="button" accessibilityState={{ selected: on }} accessibilityLabel={o.label}
+            style={[styles.pill, on && styles.pillOn]}>
+            <Text style={[styles.pillText, on && { color: colors.onGold }]}>{o.label}</Text>
+          </Pressable>
+        );
+      })}
     </ScrollView>
   );
 }
 
-export const Banner = ({ children, test }: { children: React.ReactNode; test?: boolean }) => (
-  <View style={[styles.banner, test && styles.bannerTest]} accessibilityRole="text"><Text style={[styles.p, { marginVertical: 0 }, test && { color: '#ffe3a3' }]}>{children}</Text></View>
+/** Compact notice with an icon. `test` marks test-mode notices in gold. */
+export const Banner = ({ children, test, icon }: { children: React.ReactNode; test?: boolean; icon?: IconName }) => (
+  <View style={[styles.banner, test && styles.bannerTest]} accessibilityRole="text">
+    <Icon name={icon || (test ? 'flask-outline' : 'information-circle-outline')} size={20} color={test ? colors.gold : colors.muted} />
+    <Text style={[type.callout, { flex: 1, color: test ? colors.cream : colors.text }]}>{children}</Text>
+  </View>
 );
 
 export const Tag = ({ children, tone }: { children: React.ReactNode; tone?: 'green' | 'grey' | 'red' }) => (
-  <View style={[styles.tag, tone === 'green' && { borderColor: colors.green }, tone === 'red' && { borderColor: colors.red }, tone === 'grey' && { borderColor: colors.line }]}>
+  <View style={[styles.tag, tone === 'green' && { backgroundColor: 'rgba(127,220,174,0.12)' }, tone === 'red' && { backgroundColor: 'rgba(255,107,125,0.12)' }, tone === 'grey' && { backgroundColor: colors.pane2 }]}>
     <Text style={[styles.tagText, tone === 'green' && { color: colors.green }, tone === 'red' && { color: colors.red }, tone === 'grey' && { color: colors.muted }]}>{children}</Text>
   </View>
 );
 
-export function Avatar({ user, size = 40 }: { user?: { avatarUrl?: string | null; displayName?: string } | null; size?: number }) {
+export function Avatar({ user, size = 40, ring }: { user?: { avatarUrl?: string | null; displayName?: string } | null; size?: number; ring?: boolean }) {
   const uri = media(user?.avatarUrl);
-  return (
+  const inner = (
     <View style={[styles.avatar, { width: size, height: size, borderRadius: size / 2 }]} accessible={false} importantForAccessibility="no-hide-descendants">
-      {uri ? <Image source={{ uri }} style={{ width: size, height: size, borderRadius: size / 2 }} contentFit="cover" /> :
-        <Text style={{ color: colors.gold, fontWeight: '800', fontSize: size * 0.4 }}>{initial(user?.displayName)}</Text>}
+      {uri ? <Image source={{ uri }} style={{ width: size, height: size, borderRadius: size / 2 }} contentFit="cover" transition={150} /> :
+        <Text style={{ color: colors.gold, fontFamily: font.semibold, fontSize: size * 0.4 }}>{initial(user?.displayName)}</Text>}
     </View>
   );
+  if (!ring) return inner;
+  return <View style={{ padding: 2, borderRadius: size, borderWidth: 2, borderColor: colors.gold }}>{inner}</View>;
 }
 
 export function ListItem({ title, subtitle, left, right, onPress, label, testID }: {
@@ -182,29 +240,31 @@ export function ListItem({ title, subtitle, left, right, onPress, label, testID 
     <>
       {left}
       <View style={{ flex: 1 }}>
-        <Text style={styles.liTitle} numberOfLines={1}>{title}</Text>
-        {subtitle ? <Text style={styles.muted} numberOfLines={2}>{subtitle}</Text> : null}
+        <Text style={type.bodyStrong} numberOfLines={1}>{title}</Text>
+        {subtitle ? <Text style={[type.callout, { color: colors.muted, marginTop: 1 }]} numberOfLines={2}>{subtitle}</Text> : null}
       </View>
-      {right}
+      {right ?? (onPress ? <Icon name="chevron-forward" size={18} color={colors.faint} /> : null)}
     </>
   );
-  if (!onPress) return <View style={styles.li} accessible accessibilityLabel={label || [title, subtitle].filter(Boolean).join('. ')}>{body}</View>;
-  return <Pressable style={styles.li} onPress={onPress} accessibilityRole="button" accessibilityLabel={label || [title, subtitle].filter(Boolean).join('. ')} testID={testID}>{body}</Pressable>;
+  const a11y = label || [title, subtitle].filter(Boolean).join('. ');
+  if (!onPress) return <View style={styles.li} accessible accessibilityLabel={a11y}>{body}</View>;
+  return <Pressable style={({ pressed }) => [styles.li, pressed && { opacity: 0.7 }]} onPress={onPress} accessibilityRole="button" accessibilityLabel={a11y} testID={testID}>{body}</Pressable>;
 }
 
+/** Profile-style stats row. */
 export function Metrics({ items }: { items: [string, string][] }) {
   return (
     <View style={styles.metrics}>
-      {items.map(([n, l]) => (
-        <View key={l} style={styles.metric} accessible accessibilityLabel={`${n} ${l}`}>
-          <Text style={styles.metricN}>{n}</Text><Text style={styles.muted}>{l}</Text>
+      {items.map(([n, l], i) => (
+        <View key={l} style={[styles.metric, i > 0 && { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: colors.lineStrong }]} accessible accessibilityLabel={`${n} ${l}`}>
+          <Text style={styles.metricN}>{n}</Text><Text style={[type.caption, { color: colors.muted, marginTop: 2 }]}>{l}</Text>
         </View>
       ))}
     </View>
   );
 }
 
-/** Bottom sheet modal with an accessible close button. */
+/** Bottom sheet with a grabber and an accessible close button. */
 export function Sheet({ visible, title, onClose, children }: { visible: boolean; title: string; onClose: () => void; children: React.ReactNode }) {
   const insets = useSafeAreaInsets();
   return (
@@ -212,65 +272,81 @@ export function Sheet({ visible, title, onClose, children }: { visible: boolean;
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.shade}>
         <Pressable style={{ flex: 1 }} onPress={onClose} accessibilityLabel="Close" accessibilityRole="button" />
         <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]} accessibilityLabel={title}>
+          <View style={styles.grabber} />
           <View style={styles.sheetHead}>
-            <Text style={styles.h2} accessibilityRole="header">{title}</Text>
-            <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Close" hitSlop={12} testID="sheet-close"><Text style={{ color: colors.text, fontSize: 26 }}>×</Text></Pressable>
+            <Text style={[type.headline, { flex: 1 }]} accessibilityRole="header" numberOfLines={1}>{title}</Text>
+            <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Close" hitSlop={12} testID="sheet-close" style={styles.closeBtn}>
+              <Icon name="close" size={20} color={colors.text} />
+            </Pressable>
           </View>
-          <ScrollView keyboardShouldPersistTaps="handled">{children}</ScrollView>
+          <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>{children}</ScrollView>
         </View>
       </KeyboardAvoidingView>
     </Modal>
   );
 }
 
-export function SearchBox({ value, onChange, placeholder = 'Search businesses and products…', label = 'Search marketplace' }: { value: string; onChange: (v: string) => void; placeholder?: string; label?: string }) {
-  return <TextInput value={value} onChangeText={onChange} placeholder={placeholder} placeholderTextColor="#77737b" accessibilityLabel={label} style={[styles.field, { marginTop: 6 }]} autoCapitalize="none" testID="search-input" />;
+export function SearchBox({ value, onChange, placeholder = 'Search businesses and products', label = 'Search marketplace' }: { value: string; onChange: (v: string) => void; placeholder?: string; label?: string }) {
+  return (
+    <View style={styles.search}>
+      <Icon name="search" size={18} color={colors.faint} />
+      <TextInput value={value} onChangeText={onChange} placeholder={placeholder} placeholderTextColor={colors.faint} accessibilityLabel={label}
+        style={[type.body, { flex: 1, paddingVertical: 10, color: colors.text }]} autoCapitalize="none" autoCorrect={false} testID="search-input" />
+      {value ? <Pressable onPress={() => onChange('')} accessibilityRole="button" accessibilityLabel="Clear search" hitSlop={8}><Icon name="close-circle" size={18} color={colors.faint} /></Pressable> : null}
+    </View>
+  );
 }
-
 
 export const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.app },
   pad: { paddingHorizontal: 16 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: colors.app },
-  pagehead: { paddingHorizontal: 16, paddingTop: 18, paddingBottom: 8, flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
-  eyebrow: { color: colors.gold, fontSize: 12, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase' },
-  h1: { color: colors.text, fontSize: 26, fontWeight: '800', marginTop: 4 },
-  h2: { color: colors.text, fontSize: 20, fontWeight: '800' },
-  intro: { color: colors.muted, marginTop: 6, lineHeight: 20 },
-  p: { color: colors.text, lineHeight: 21, marginVertical: 4 },
-  muted: { color: colors.muted, lineHeight: 19 },
-  sectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 22, marginBottom: 8 },
-  section: { color: colors.cream, fontSize: 17, fontWeight: '800' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, backgroundColor: colors.app },
+  pagehead: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 6, flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  sectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 26, marginBottom: 6 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  card: { backgroundColor: colors.pane, borderRadius: radius.md, borderWidth: 1, borderColor: '#28252b', padding: 14, marginVertical: 6 },
-  btn: { minHeight: 46, borderRadius: radius.md, paddingHorizontal: 18, alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-start' },
-  btnSmall: { minHeight: 34, paddingHorizontal: 12, borderRadius: 10 },
+  card: { backgroundColor: colors.pane, borderRadius: radius.lg, padding: 16, marginVertical: 6 },
+  empty: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14 },
+  btn: { minHeight: 48, borderRadius: radius.md, paddingHorizontal: 20, alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-start' },
+  btnSmall: { minHeight: 36, paddingHorizontal: 14, borderRadius: 10 },
   primary: { backgroundColor: colors.gold },
-  secondary: { backgroundColor: colors.pane2, borderWidth: 1, borderColor: colors.line },
-  danger: { backgroundColor: '#3a1f24', borderWidth: 1, borderColor: colors.red },
-  btnText: { color: colors.text, fontWeight: '800', fontSize: 15 },
-  label: { color: colors.cream, fontWeight: '700', marginBottom: 6 },
-  field: { backgroundColor: colors.pane2, borderWidth: 1, borderColor: colors.line, borderRadius: 12, color: colors.text, paddingHorizontal: 12, paddingVertical: 11, fontSize: 16 },
-  check: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12, minHeight: 44 },
-  box: { width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
-  boxOn: { backgroundColor: colors.gold },
-  method: { borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, padding: 14, backgroundColor: colors.pane },
-  methodOn: { borderColor: colors.gold, backgroundColor: '#241d16' },
-  methodTitle: { color: colors.text, fontWeight: '800', marginBottom: 2 },
-  pill: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.pane },
-  pillOn: { borderColor: colors.gold, backgroundColor: '#2b2117' },
-  pillText: { color: colors.text, fontWeight: '700' },
-  banner: { borderRadius: radius.md, borderWidth: 1, borderColor: '#4a3a24', backgroundColor: '#1d1813', padding: 12, marginVertical: 8 },
-  bannerTest: { borderColor: colors.gold, backgroundColor: '#3a2a12' },
-  tag: { borderWidth: 1, borderColor: colors.gold, borderRadius: radius.pill, paddingHorizontal: 9, paddingVertical: 3, alignSelf: 'flex-start', marginRight: 6, marginTop: 4 },
-  tagText: { color: colors.gold, fontSize: 12, fontWeight: '700' },
-  avatar: { backgroundColor: '#2a2219', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  li: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#221f24', minHeight: 56 },
-  liTitle: { color: colors.text, fontWeight: '800' },
-  metrics: { flexDirection: 'row', gap: 8, marginVertical: 8 },
-  metric: { flex: 1, backgroundColor: colors.pane, borderRadius: radius.md, padding: 12, alignItems: 'center' },
-  metricN: { color: colors.gold, fontSize: 20, fontWeight: '900' },
-  shade: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: colors.pane, borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 16, maxHeight: '88%' },
-  sheetHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  secondary: { backgroundColor: colors.pane2 },
+  danger: { backgroundColor: 'rgba(255,107,125,0.12)' },
+  ghost: { backgroundColor: 'transparent', paddingHorizontal: 8 },
+  btnText: { fontFamily: font.semibold, fontSize: 15, letterSpacing: -0.1 },
+  btnTextSmall: { fontFamily: font.semibold, fontSize: 13 },
+  label: { ...type.caption, color: colors.muted, marginBottom: 6 },
+  field: { ...type.body, backgroundColor: colors.pane2, borderRadius: radius.md, color: colors.text, paddingHorizontal: 14, minHeight: 48, borderWidth: 1, borderColor: 'transparent' },
+  fieldFocus: { borderColor: colors.gold },
+  check: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 14, minHeight: 44 },
+  box: { width: 22, height: 22, borderRadius: 6, borderWidth: 1.5, borderColor: colors.lineStrong, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.pane2 },
+  boxOn: { backgroundColor: colors.gold, borderColor: colors.gold },
+  group: { marginTop: 10, backgroundColor: colors.pane, borderRadius: radius.lg, overflow: 'hidden' },
+  option: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 14, minHeight: 52 },
+  optionDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.lineStrong },
+  radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: colors.lineStrong, alignItems: 'center', justifyContent: 'center' },
+  radioOn: { borderColor: colors.gold },
+  radioDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: colors.gold },
+  pill: { paddingHorizontal: 14, height: 34, justifyContent: 'center', borderRadius: radius.pill, backgroundColor: colors.pane2 },
+  pillOn: { backgroundColor: colors.cream },
+  pillText: { fontFamily: font.semibold, fontSize: 13, color: colors.text },
+  banner: { flexDirection: 'row', gap: 10, alignItems: 'flex-start', borderRadius: radius.md, backgroundColor: colors.pane, padding: 12, marginVertical: 8 },
+  bannerTest: { backgroundColor: 'rgba(246,198,111,0.10)', borderWidth: 1, borderColor: 'rgba(246,198,111,0.35)' },
+  tag: { backgroundColor: colors.goldSoft, borderRadius: radius.pill, paddingHorizontal: 9, paddingVertical: 3, alignSelf: 'flex-start', marginRight: 6, marginTop: 6 },
+  tagText: { fontFamily: font.semibold, fontSize: 11, color: colors.gold },
+  avatar: { backgroundColor: colors.pane3, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  li: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, minHeight: 60, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
+  metrics: { flexDirection: 'row', marginVertical: 14 },
+  metric: { flex: 1, alignItems: 'center', paddingVertical: 4 },
+  metricN: { fontFamily: font.bold, fontSize: 19, color: colors.text, letterSpacing: -0.3 },
+  shade: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: colors.pane, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 16, paddingTop: 8, maxHeight: '90%' },
+  grabber: { alignSelf: 'center', width: 36, height: 5, borderRadius: 3, backgroundColor: colors.lineStrong, marginBottom: 8 },
+  sheetHead: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, minHeight: 40 },
+  closeBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.pane2, alignItems: 'center', justifyContent: 'center' },
+  search: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.pane2, borderRadius: radius.md, paddingHorizontal: 12, marginTop: 8 },
+  // legacy aliases used by some screens
+  muted: { ...type.callout, color: colors.muted },
+  liTitle: { ...type.bodyStrong },
+  p: { ...type.body },
+  h2: { ...type.title },
 });

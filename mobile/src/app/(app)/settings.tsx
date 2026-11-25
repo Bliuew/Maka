@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Platform, Text } from 'react-native';
+import { Platform, View } from 'react-native';
+import { Text } from '../../components/Text';
 import * as Linking from 'expo-linking';
 import * as Sharing from 'expo-sharing';
 import { File, Paths } from 'expo-file-system';
@@ -38,18 +39,17 @@ export default function Settings() {
 
   return (
     <Screen onRefresh={() => reload(true)} refreshing={refreshing}>
-      <SectionTitle>Privacy & interactions</SectionTitle>
-      <Card>
-        <Text style={{ color: colors.cream, fontWeight: '700' }}>Who can message me</Text>
+      <SectionTitle>Who can message me</SectionTitle>
+      <View>
         <Choice label="Who can message me" value={dm} onChange={setDm} options={[{ value: 'everyone', label: 'Everyone (19+ verified)' }, { value: 'following', label: 'Only people I follow' }, { value: 'nobody', label: 'Nobody' }]} />
-        <Text style={{ color: colors.cream, fontWeight: '700', marginTop: 14 }}>Default stitch/remix permission</Text>
+        <Text style={{ color: colors.muted, fontWeight: '500', fontSize: 13, marginTop: 22 }}>DEFAULT STITCH / REMIX PERMISSION</Text>
         <Choice label="Default stitch or remix permission" value={remix} onChange={setRemix} options={[{ value: 'everyone', label: 'Everyone' }, { value: 'followers', label: 'Followers' }, { value: 'nobody', label: 'Nobody' }]} />
         <Field label="Hide comments containing (comma separated)" value={filter} onChangeText={setFilter} autoCapitalize="none" />
         <Button title="Save" block onPress={act(async () => {
           setMe(await api.patch('/api/me', { dmPolicy: dm, defaultRemix: remix, commentFilter: filter.split(',').map((s: string) => s.trim()).filter(Boolean) }));
           toast.show('Settings saved');
         })} />
-      </Card>
+      </View>
 
       <SectionTitle>Blocked accounts</SectionTitle>
       {data.blocked.length ? data.blocked.map((u) => <ListItem key={u.id} left={<Avatar user={u} />} title={'@' + u.handle}
@@ -68,7 +68,7 @@ export default function Settings() {
           <P muted>{new Date(s.created_at).toLocaleString()}{s.revoked ? ' · overturned' : ''}</P>
           {s.revoked ? null : <Button title="Appeal" small variant="secondary" onPress={() => { setAppealText(''); setAppeal(s.id); }} />}
         </Card>
-      )) : <Empty>Good standing ✓</Empty>}
+      )) : <Empty icon="shield-checkmark-outline">Your account is in good standing.</Empty>}
 
       <SectionTitle>Orders</SectionTitle>
       {data.orders.length ? data.orders.map((o) => <ListItem key={o.id} title={`${o.business} · ${o.status}`} subtitle={money(o.totalCents, o.currency)}

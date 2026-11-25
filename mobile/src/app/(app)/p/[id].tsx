@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { useIsFocused, useLocalSearchParams, useRouter } from 'expo-router';
 import FeedItem from '../../../components/FeedItem';
 import { CommentsSheet, MoreSheet, usePostActions, type Post } from '../../../components/post';
-import { Loading, useLoad } from '../../../components/ui';
+import { Icon, Loading, useLoad } from '../../../components/ui';
 import { api } from '../../../lib/client';
 import { feedState } from '../(tabs)/index';
 
@@ -21,7 +21,7 @@ export default function SinglePost() {
   const back = (
     <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} accessibilityRole="button" accessibilityLabel="Back"
       style={{ position: 'absolute', top: 12, left: 12, zIndex: 3, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8 }}>
-      <Text style={{ color: '#fff', fontWeight: '800' }}>← Back</Text>
+      <Icon name="chevron-back" size={26} color="#fff" />
     </Pressable>
   );
   return (
