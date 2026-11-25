@@ -48,7 +48,7 @@ The web smoke test covers the real React Native screens rendered with react-nati
 ## Builds (Task 4)
 
 - **App identity** (`app.json`): name **Mäka**. Bundle ID and package `io.github.bliuew.maka`, which is reverse-DNS of `bliuew.github.io`. Change it to a domain you own **before the first store upload**, because it can't change afterwards.
-- **Icons**: only the approved bee (`web/assets/icon-1024.png`). `scripts/make_app_icons.py` derives the Android adaptive icon and the splash image by scaling and padding only. The splash is the bee on midnight charcoal.
+- **Icons**: the founder's honeycomb "M" design (`web/assets/app-icon-design.webp`). `scripts/make_app_icons.py` builds the iOS/store icon, the Android adaptive icon (fitted to the launcher safe zone), the splash (the rounded cream tile on midnight charcoal) and the web icons. It only resizes the design, never redraws it.
 - **Permissions**: camera, microphone (sound for recorded videos), photo access and internet. Location, contacts, overlay and legacy storage-write permissions are explicitly removed.
 - **Android APK, no paid accounts**: `.github/workflows/android-apk.yml` runs `expo prebuild` and Gradle on GitHub's runners and publishes a GitHub Release. The newest build is always at `https://github.com/Bliuew/Maka/releases/latest/download/maka.apk`. Set the repository variable `MAKA_API_URL` to bake in your server.
 - **Signing**: without keystore secrets the APK is signed with the public debug key. That is fine for testers, and updates install over each other, but Google Play won't accept it. `plugins/withReleaseSigning.js` switches to your upload keystore when the `MAKA_UPLOAD_*` secrets are set.

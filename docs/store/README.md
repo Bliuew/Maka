@@ -28,7 +28,7 @@ All four are **drafts for legal review**. Each page marks its placeholders, such
 - [ ] Have a lawyer review the privacy policy, terms and guidelines, and fill in the placeholders.
 - [ ] Commit to acting on reports within 24 hours, and staff the moderation queue (Apple expects this for UGC apps).
 - [ ] Confirm the bundle ID / package (`io.github.bliuew.maka`) or change it to your own domain **before the first upload**. It can't change afterwards.
-- [ ] Replace the interim bee icon with the illustrator's standalone transparent export if you want a crisper icon (the current one is cut from the 512 px wordmark).
+- [ ] Export the honeycomb "M" icon design at 1024 px or larger (or as SVG) and rerun `mobile/scripts/make_app_icons.py`. Apple's store icon is 1024 px, and the supplied design is 512 px.
 
 ### Google Play (internal testing → closed testing → production)
 - [ ] Google Play Console developer account (one-time US$25 fee, identity verification).

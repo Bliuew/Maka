@@ -24,7 +24,7 @@ Uploaded chunks are stored as parts in the bucket and the byte offset is kept in
 
 Dev moderator login: `trust.safety@sample.maka.test` / `dev-admin-password` (change it with `SEED_ADMIN_PASSWORD`).
 
-**To try it on a phone:** run the server on a machine on your Wi-Fi, then open `http://<that-computer's-IP>:8080`. Use **Add to Home Screen** to install it with the bee icon. Camera upload and installing to the home screen need HTTPS, so for real devices put it behind HTTPS (for example a tunnel or your host's TLS).
+**To try it on a phone:** run the server on a machine on your Wi-Fi, then open `http://<that-computer's-IP>:8080`. Use **Add to Home Screen** to install it with the Mäka app icon. Camera upload and installing to the home screen need HTTPS, so for real devices put it behind HTTPS (for example a tunnel or your host's TLS).
 
 ## What works (tested)
 
@@ -56,7 +56,7 @@ Dev moderator login: `trust.safety@sample.maka.test` / `dev-admin-password` (cha
 6. **Native apps and stores.** The Expo app in `mobile/` is built. Android APKs are built by GitHub Actions and published as GitHub Releases. iOS builds need the Apple Developer Program. **Nothing has been submitted to TestFlight or Google Play.** `docs/store/` has everything prepared for submission and the steps that need your accounts.
 7. **Scale and operations.** Done: PostgreSQL and S3-compatible object storage, and CI against both. Still to do: transcoding still runs inside the web process, so it should move to a job queue. Rate limits and realtime fan-out are in-memory, so several instances need Redis (or Postgres LISTEN/NOTIFY). Monitoring, backups and Postgres row-level security also need setting up.
 8. **Legal.** Terms, Privacy Policy, Community Guidelines and retention periods need legal review (GDPR, PIPEDA and local law). The registration ID, contact and appeal email addresses are placeholders.
-9. **Branding.** `web/assets/icon-*.png` is an **interim** bee-only icon cut from the approved wordmark. Overlapping letter strokes were painted out and the bee was not redrawn (`scripts/make_bee_icon.py`). Swap in the illustrator's standalone transparent export when it's ready.
+9. **Branding.** The app icon is the founder's honeycomb "M" design (`web/assets/app-icon-design.webp`, supplied 25 Nov 2026 and replacing the earlier bee-only icon). Every icon size is generated from it by `mobile/scripts/make_app_icons.py`, which only resizes it. The supplied file is 512 px, so the 1024 px store icon is slightly soft. Export the same design at 1024 px or larger, or as SVG, and run the script again. The approved wordmark (`approved-logo.webp`) is unchanged and is still used on the welcome screen.
 
 All sample creators, brands, products, campaigns and films are flagged `is_sample` or `is_placeholder`, labelled in the UI, and seeded only in development.
 

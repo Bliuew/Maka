@@ -42,12 +42,14 @@ test('No dislike affordance exists anywhere in the app source', async () => {
   for (const f of src) assert.ok(!/dislike/i.test(fs.readFileSync(f, 'utf8')), f);
 });
 
-test('Branding: approved logo is byte-identical, app icon is the approved bee icon', async () => {
+test('Branding: approved logo is byte-identical, app icon is generated from the founder icon design', async () => {
   const fs = await import('node:fs');
   const crypto = await import('node:crypto');
   const sha = (p: string) => crypto.createHash('sha256').update(fs.readFileSync(new URL(p, import.meta.url))).digest('hex');
   assert.equal(sha('../assets/brand/approved-logo.webp'), sha('../../web/assets/approved-logo.webp'));
   assert.equal(sha('../assets/icon.png'), sha('../../web/assets/icon-1024.png'));
+  // Every icon is generated from the founder's design file, which is kept as supplied.
+  assert.ok(fs.statSync(new URL('../../web/assets/app-icon-design.webp', import.meta.url)).size > 1000);
   const src = fs.readFileSync(new URL('../src/lib/theme.ts', import.meta.url), 'utf8');
   assert.ok(src.includes("TAGLINE = 'Feel The Power Of Love Within You'") && src.includes("BRAND = 'Mäka'"));
 });

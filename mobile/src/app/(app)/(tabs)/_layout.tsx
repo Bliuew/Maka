@@ -18,7 +18,7 @@ function Header() {
   return (
     <View style={s.top}>
       <Pressable style={s.brand} onPress={() => router.navigate('/')} accessibilityRole="button" accessibilityLabel="Mäka home">
-        <Image source={require('../../../../assets/icon.png')} style={s.bee} accessible={false} />
+        <Image source={require('../../../../assets/icon.png')} style={s.mark} accessible={false} />
         <Text style={s.brandText}>Mäka</Text>
       </Pressable>
       <View style={s.tools}>
@@ -55,7 +55,7 @@ export default function TabsLayout() {
 const s = StyleSheet.create({
   top: { height: 56, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#0c0c0f', borderBottomWidth: 1, borderBottomColor: '#252125' },
   brand: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44 },
-  bee: { width: 32, height: 32, borderRadius: 8 },
+  mark: { width: 32, height: 32, borderRadius: 8 },
   brandText: { color: colors.text, fontSize: 24, fontWeight: '700', fontFamily: 'serif' },
   tools: { flexDirection: 'row', gap: 4 },
   ib: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
