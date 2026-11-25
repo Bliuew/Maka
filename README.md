@@ -4,10 +4,10 @@ Milestone 1 of the Mäka 19+ social platform: a working **backend API** and a **
 
 ## Run it
 
-Requirements: **Node.js 22.5+**, **ffmpeg/ffprobe** on the PATH, **PostgreSQL** and (recommended) an **S3-compatible bucket**. `docker compose up -d` starts Postgres and MinIO locally.
+Requirements: **Node.js 22.5+**, **ffmpeg/ffprobe** on the PATH, **PostgreSQL**, and an **S3-compatible bucket** in production. `docker compose up -d` starts Postgres locally (add `--profile s3` for an S3 emulator).
 
 ```bash
-docker compose up -d      # Postgres 16 + MinIO (S3-compatible) for development
+docker compose up -d      # Postgres 16 for development
 cp .env.example .env && set -a && . ./.env && set +a
 npm ci
 npm start                 # http://localhost:8080  (seeds clearly-labelled sample data in development)
@@ -18,7 +18,7 @@ npm run test:e2e          # 22-step acceptance demo in a phone-sized browser (np
 | Setting | Purpose |
 |---|---|
 | `DATABASE_URL` | PostgreSQL connection string (required). `DATABASE_SSL=1` forces TLS. `DATABASE_SCHEMA` isolates a run in its own schema (tests use this). |
-| `S3_BUCKET`, `S3_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_FORCE_PATH_STYLE=1` | Media storage in any S3-compatible service (AWS S3, Cloudflare R2, Backblaze B2, MinIO). Without `S3_BUCKET` media is kept on local disk, which is allowed **only outside production**. `S3_CREATE_BUCKET=1` creates the bucket (dev/CI). |
+| `S3_BUCKET`, `S3_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_FORCE_PATH_STYLE=1` | Media storage in any S3-compatible service (AWS S3, Cloudflare R2, Backblaze B2, Wasabi). Without `S3_BUCKET` media is kept on local disk, which is allowed **only outside production**. `S3_CREATE_BUCKET=1` creates the bucket (dev/CI). |
 
 Uploaded chunks are stored as parts in the bucket and the byte offset is kept in Postgres, so a resumable upload can continue on a different server instance. Transcoding runs in a temporary directory, and the results (`media/<id>/video.mp4`, `poster.jpg`) are uploaded back. Media is still served through signed, expiring `/media/...` URLs with Range support, which are proxied from the bucket.
 
@@ -88,7 +88,7 @@ Staging runs the **labelled age-verification simulator**, so keep it invite-only
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs on every push and pull request. It has two jobs, and both use a Postgres 16 service and a MinIO (S3-compatible) container:
+`.github/workflows/ci.yml` runs on every push and pull request. It has two jobs, and both use a Postgres 16 service and an S3-compatible server (moto):
 
 - **API tests:** `npm test`.
 - **End-to-end:** `npm run test:e2e` in headless Chromium at iPhone 13 size. The screenshots are uploaded as a build artifact.

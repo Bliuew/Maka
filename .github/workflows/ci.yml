@@ -24,13 +24,15 @@ jobs:
       S3_SECRET_ACCESS_KEY: maka-ci-secret
       S3_CREATE_BUCKET: "1"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with: { node-version: 22, cache: npm }
-      - name: Start MinIO (S3-compatible storage)
+      - name: Start S3-compatible storage (moto server)
         run: |
-          docker run -d --name minio -p 9000:9000 -e MINIO_ROOT_USER=maka -e MINIO_ROOT_PASSWORD=maka-ci-secret minio/minio:latest server /data
-          for i in $(seq 1 30); do curl -sf http://localhost:9000/minio/health/live && break; sleep 1; done
+          pipx install 'moto[server]'
+          nohup moto_server -H 127.0.0.1 -p 9000 > /tmp/moto.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:9000/ >/dev/null && break; sleep 1; done
+          curl -sf http://127.0.0.1:9000/ >/dev/null
       - name: Install ffmpeg
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - run: npm ci
@@ -56,13 +58,15 @@ jobs:
       S3_SECRET_ACCESS_KEY: maka-ci-secret
       S3_CREATE_BUCKET: "1"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with: { node-version: 22, cache: npm }
-      - name: Start MinIO (S3-compatible storage)
+      - name: Start S3-compatible storage (moto server)
         run: |
-          docker run -d --name minio -p 9000:9000 -e MINIO_ROOT_USER=maka -e MINIO_ROOT_PASSWORD=maka-ci-secret minio/minio:latest server /data
-          for i in $(seq 1 30); do curl -sf http://localhost:9000/minio/health/live && break; sleep 1; done
+          pipx install 'moto[server]'
+          nohup moto_server -H 127.0.0.1 -p 9000 > /tmp/moto.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:9000/ >/dev/null && break; sleep 1; done
+          curl -sf http://127.0.0.1:9000/ >/dev/null
       - name: Install ffmpeg
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - run: npm ci
