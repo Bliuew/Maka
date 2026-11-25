@@ -12,7 +12,7 @@ cp .env.example .env && set -a && . ./.env && set +a
 npm ci
 npm start                 # http://localhost:8080  (seeds clearly-labelled sample data in development)
 npm test                  # API + policy tests (against DATABASE_URL, and S3 when S3_BUCKET is set)
-npm run test:e2e          # 22-step acceptance demo in a phone-sized browser (needs Playwright + Chromium)
+npm run test:e2e          # 22-step acceptance demo in a phone-sized browser (npx playwright install chromium first)
 ```
 
 | Setting | Purpose |
@@ -85,3 +85,10 @@ Staging runs the **labelled age-verification simulator**, so keep it invite-only
 3. Press **Run** to try it in the preview, then **Publish → Reserved VM**. You get a `https://<name>.replit.app` address.
 
 **Data persistence:** add Replit's **PostgreSQL** database (it sets `DATABASE_URL`). For media, add `S3_*` secrets for an S3-compatible bucket such as Cloudflare R2. Replit's own App Storage does not offer S3 keys, so the S3 driver can't use it.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push and pull request. It has two jobs, and both use a Postgres 16 service and a MinIO (S3-compatible) container:
+
+- **API tests:** `npm test`.
+- **End-to-end:** `npm run test:e2e` in headless Chromium at iPhone 13 size. The screenshots are uploaded as a build artifact.
