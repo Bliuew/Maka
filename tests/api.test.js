@@ -6,18 +6,27 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 
+// Runs against PostgreSQL (DATABASE_URL) in a throwaway schema, and against
+// S3-compatible storage when S3_BUCKET is set (local disk otherwise).
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'maka-api-'));
 process.env.MAKA_DATA_DIR = dataDir;
+process.env.DATABASE_URL ||= 'postgres://postgres@localhost:5432/maka';
+const schema = 'maka_test_' + Math.random().toString(36).slice(2, 10);
 const { createApp } = await import('../server/app.js');
 const { personRefHash } = await import('../server/age.js');
+const { toPg } = await import('../server/db.js');
 
 let app, base;
 before(async () => {
-  app = createApp({ dbFile: path.join(dataDir, 't.db') });
+  app = await createApp({ schema });
   await new Promise((r) => app.server.listen(0, r));
   base = `http://localhost:${app.server.address().port}`;
 });
-after(() => { app.close(); fs.rmSync(dataDir, { recursive: true, force: true }); });
+after(async () => {
+  await app.db.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+  await app.close();
+  fs.rmSync(dataDir, { recursive: true, force: true });
+});
 
 let ip = 0;
 async function call(method, p, token, body, headers = {}) {
@@ -72,7 +81,7 @@ test('Under-19 result closes the account and removes personal data', async () =>
   const s = await call('POST', '/api/age/start', r.data.token, { method: 'bank' });
   await call('POST', '/api/age/test/complete', r.data.token, { checkId: s.data.checkId, outcome: 'under_age' });
   assert.equal((await call('GET', '/api/me', r.data.token)).status, 401);
-  const row = app.q.get('SELECT * FROM users WHERE id=?', r.data.user.id);
+  const row = await app.q.get('SELECT * FROM users WHERE id=?', r.data.user.id);
   assert.equal(row.status, 'ineligible'); assert.ok(!row.email.includes('young'));
   assert.equal((await call('POST', '/api/auth/login', null, { email: 'young@ex.com', password: 'long-enough-pw' })).status, 401);
 });
@@ -114,8 +123,8 @@ test('For You ranking ignores follower counts', async () => {
   for (let i = 0; i < 6; i++) { resetLimits(); const f = await adult(); await call('POST', `/api/users/${famous.id}/follow`, f.token); }
   // identical engagement + age => scores must be equal regardless of followers
   const t = Date.now() - 2 * 3600e3;
-  app.q.run('UPDATE posts SET published_at=? WHERE id IN (?,?)', t, pf.id, pu.id);
-  const rank = app.ctx.rankForYou(viewer.id, 50);
+  await app.q.run('UPDATE posts SET published_at=? WHERE id IN (?,?)', t, pf.id, pu.id);
+  const rank = await app.ctx.rankForYou(viewer.id, 50);
   const ia = rank.findIndex((p) => p.id === pf.id), ib = rank.findIndex((p) => p.id === pu.id);
   assert.ok(ia >= 0 && ib >= 0);
   assert.equal(Math.abs(ia - ib), 1, 'equal-quality posts sit next to each other regardless of follower count');
@@ -176,7 +185,7 @@ test('Report → admin ban → identity blocked from re-registering → appeal b
   resetLimits();
   const victim = await adult(), abuser = await adult('abuser1', 'person-X');
   const admin1 = await adult(), admin2 = await adult();
-  app.q.run("UPDATE users SET role='admin' WHERE id IN (?,?)", admin1.id, admin2.id);
+  await app.q.run("UPDATE users SET role='admin' WHERE id IN (?,?)", admin1.id, admin2.id);
   const p = await post(abuser, 'targeted post');
   const r = await call('POST', '/api/reports', victim.token, { targetType: 'post', targetId: p.id, reason: 'bullying', alsoBlock: true });
   assert.equal(r.data.blocked, true);
@@ -186,9 +195,9 @@ test('Report → admin ban → identity blocked from re-registering → appeal b
   assert.equal(item.recommendedLevel, 'warning');
   assert.equal((await call('POST', `/api/admin/reports/${item.id}/resolve`, admin1.token, { action: 'ban' })).data.error, 'note_required');
   await call('POST', `/api/admin/reports/${item.id}/resolve`, admin1.token, { action: 'ban', note: 'Targeted harassment' });
-  assert.equal(app.q.get('SELECT status FROM posts WHERE id=?', p.id).status, 'removed');
+  assert.equal((await app.q.get('SELECT status FROM posts WHERE id=?', p.id)).status, 'removed');
   assert.equal((await call('GET', '/api/me', abuser.token)).status, 401, 'sessions revoked');
-  assert.ok(app.q.get('SELECT 1 FROM banned_identities WHERE person_ref_hash=?', personRefHash('test-person:person-X')));
+  assert.ok(await app.q.get('SELECT 1 FROM banned_identities WHERE person_ref_hash=?', personRefHash('test-person:person-X')));
   // Same verified person tries a new account from a new email/device: held for review, not admitted.
   resetLimits();
   const again = await adult('abuser2', 'person-X');
@@ -197,11 +206,11 @@ test('Report → admin ban → identity blocked from re-registering → appeal b
   // Appeal: original reviewer cannot decide it; another can overturn.
   const login = await call('POST', '/api/auth/login', null, { email: 'abuser1@ex.com', password: 'long-enough-pw' });
   assert.equal(login.data.error, 'account_banned');
-  const sid = app.q.get('SELECT id FROM sanctions WHERE user_id=?', abuser.id).id;
-  app.q.run("INSERT INTO appeals (id,user_id,sanction_id,body,created_at) VALUES ('ap1',?,?,'It was satire',?)", abuser.id, sid, Date.now());
+  const sid = (await app.q.get('SELECT id FROM sanctions WHERE user_id=?', abuser.id)).id;
+  await app.q.run("INSERT INTO appeals (id,user_id,sanction_id,body,created_at) VALUES ('ap1',?,?,'It was satire',?)", abuser.id, sid, Date.now());
   assert.equal((await call('POST', '/api/admin/appeals/ap1/decide', admin1.token, { decision: 'overturned' })).data.error, 'reviewer_conflict');
   await call('POST', '/api/admin/appeals/ap1/decide', admin2.token, { decision: 'overturned' });
-  assert.equal(app.q.get('SELECT status FROM users WHERE id=?', abuser.id).status, 'active');
+  assert.equal((await app.q.get('SELECT status FROM users WHERE id=?', abuser.id)).status, 'active');
   const audit = (await call('GET', '/api/admin/audit', admin2.token)).data.map((x) => x.action);
   assert.ok(audit.includes('report_ban') && audit.includes('appeal_overturned'));
 });
@@ -209,7 +218,7 @@ test('Report → admin ban → identity blocked from re-registering → appeal b
 test('Collabs: no follower criteria, open to a 0-follower creator, contract → pending earnings', async () => {
   resetLimits();
   const owner = await adult(), creator = await adult(), admin = await adult();
-  app.q.run("UPDATE users SET role='admin' WHERE id=?", admin.id);
+  await app.q.run("UPDATE users SET role='admin' WHERE id=?", admin.id);
   const biz = await call('POST', '/api/businesses', owner.token, { name: 'Honey Co', category: 'Food', registrationRef: 'BN123' });
   assert.equal((await call('POST', `/api/businesses/${biz.data.id}/campaigns`, owner.token, { title: 'x', brief: 'y', deliverables: 'z', compensationCents: 100 })).data.error, 'business_not_verified');
   await call('POST', `/api/admin/businesses/${biz.data.id}/verify`, admin.token, { decision: 'verified' });
@@ -231,7 +240,7 @@ test('Collabs: no follower criteria, open to a 0-follower creator, contract → 
 test('Cinema never plays placeholders; licensed titles need a rights window for the territory', async () => {
   resetLimits();
   const u = await adult(), admin = await adult();
-  app.q.run("UPDATE users SET role='admin' WHERE id=?", admin.id);
+  await app.q.run("UPDATE users SET role='admin' WHERE id=?", admin.id);
   const ph = await call('POST', '/api/admin/titles', admin.token, { name: 'Placeholder', kind: 'movie', genres: ['Drama'], isPlaceholder: true });
   assert.equal((await call('POST', `/api/cinema/${ph.data.id}/play`, u.token)).data.error, 'placeholder');
   const t = await call('POST', '/api/admin/titles', admin.token, { name: 'Licensed', kind: 'movie', genres: ['Drama'], streamUrl: 'https://cdn.example/x.m3u8' });
@@ -245,7 +254,7 @@ test('Cinema never plays placeholders; licensed titles need a rights window for 
 test('Market: server-side prices, stock checks, checkout refuses without payment provider', async () => {
   resetLimits();
   const owner = await adult(), buyer = await adult(), admin = await adult();
-  app.q.run("UPDATE users SET role='admin' WHERE id=?", admin.id);
+  await app.q.run("UPDATE users SET role='admin' WHERE id=?", admin.id);
   const biz = await call('POST', '/api/businesses', owner.token, { name: 'Shop', category: 'Home', registrationRef: 'R' });
   await call('POST', `/api/admin/businesses/${biz.data.id}/verify`, admin.token, { decision: 'verified' });
   const pr = await call('POST', `/api/businesses/${biz.data.id}/products`, owner.token, { name: 'Candle', priceCents: 1500, stock: 2 });
@@ -277,4 +286,71 @@ test('Private test server: sign-up requires the invite code when INVITE_CODE is 
     assert.equal((await call('POST', '/api/auth/register', null, { ...body, inviteCode: 'honey-2026' })).status, 200);
     assert.equal((await call('GET', '/api/health')).data.inviteRequired, true);
   } finally { app.ctx.config.inviteCode = null; }
+});
+
+test('Postgres: placeholders are rewritten outside string literals', () => {
+  assert.equal(toPg("SELECT * FROM t WHERE a=? AND b='what?' AND c=?"), "SELECT * FROM t WHERE a=$1 AND b='what?' AND c=$2");
+});
+
+test('Health reports Postgres and the media storage in use', async () => {
+  const h = await call('GET', '/api/health');
+  assert.equal(h.status, 200);
+  assert.equal(h.data.database, 'postgres');
+  assert.match(h.data.storage, process.env.S3_BUCKET ? /object storage/ : /local disk/);
+});
+
+test('Handles are unique regardless of letter case', async () => {
+  resetLimits();
+  const a = await adult('casey.case');
+  const dup = await call('POST', '/api/auth/register', null, { email: 'other-casey@ex.com', password: 'long-enough-pw', handle: 'Casey.Case', displayName: 'C', acceptTerms: true });
+  assert.equal(dup.data.error, 'handle_taken');
+  assert.equal((await call('GET', '/api/users/CASEY.CASE', a.token)).data.user.id, a.id);
+});
+
+test('Media lives in object storage: parts are cleaned up and outputs stored', async () => {
+  resetLimits();
+  const a = await adult();
+  const p = await post(a, 'storage check');
+  const m = await app.q.get('SELECT m.* FROM media m JOIN posts p ON p.media_id=m.id WHERE p.id=?', p.id);
+  const keys = await app.storage.list(`media/${m.id}`);
+  assert.ok(keys.includes(`media/${m.id}/video.mp4`) && keys.includes(`media/${m.id}/poster.jpg`), JSON.stringify(keys));
+  assert.equal((await app.storage.list(`media/${m.id}/parts`)).length, 0, 'upload parts deleted after processing');
+  const full = await fetch(base + p.posterUrl);
+  assert.equal(full.status, 200);
+  assert.equal(full.headers.get('content-type'), 'image/jpeg');
+});
+
+test('A resumable upload can continue on a second server instance', async () => {
+  resetLimits();
+  const a = await adult();
+  const other = await createApp({ schema });
+  await new Promise((r) => other.server.listen(0, r));
+  const base2 = `http://localhost:${other.server.address().port}`;
+  try {
+    const buf = fs.readFileSync(clip);
+    const u = await call('POST', '/api/uploads', a.token, { kind: 'video', size: buf.length });
+    const half = Math.floor(buf.length / 2);
+    assert.equal((await call('PUT', `/api/uploads/${u.data.uploadId}?offset=0`, a.token, new Uint8Array(buf.subarray(0, half)))).data.received, half);
+    // Instance 1 "goes away"; the client resumes against instance 2 from the server offset.
+    const h = { authorization: 'Bearer ' + a.token };
+    const st = await (await fetch(`${base2}/api/uploads/${u.data.uploadId}`, { headers: h })).json();
+    assert.equal(st.received, half);
+    const put = await fetch(`${base2}/api/uploads/${u.data.uploadId}?offset=${half}`, { method: 'PUT', headers: h, body: new Uint8Array(buf.subarray(half)) });
+    assert.equal((await put.json()).received, buf.length);
+    // A replayed (stale) chunk is refused with the current offset.
+    const stale = await fetch(`${base2}/api/uploads/${u.data.uploadId}?offset=0`, { method: 'PUT', headers: h, body: new Uint8Array(buf.subarray(0, half)) });
+    assert.equal(stale.status, 409); assert.equal((await stale.json()).received, buf.length);
+    await fetch(`${base2}/api/uploads/${u.data.uploadId}/complete`, { method: 'POST', headers: h });
+    let s; for (let i = 0; i < 100; i++) { s = await call('GET', `/api/uploads/${u.data.uploadId}`, a.token); if (s.data.status !== 'processing') break; await new Promise((r) => setTimeout(r, 150)); }
+    assert.equal(s.data.status, 'ready');
+  } finally { await other.close(); }
+});
+
+test('Production refuses to start without Postgres and object storage', () => {
+  const env = { ...process.env, NODE_ENV: 'production', MAKA_SECRET: 'x', AGE_PROVIDER: 'real', AGE_PROVIDER_API_KEY: 'k', SEED_SAMPLES: '0' };
+  delete env.DATABASE_URL; delete env.S3_BUCKET;
+  const r = spawnSync(process.execPath, ['--no-warnings=ExperimentalWarning', 'server/index.js'], { env, encoding: 'utf8', timeout: 10000 });
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /DATABASE_URL/);
+  assert.match(r.stderr, /S3_BUCKET/);
 });

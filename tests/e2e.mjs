@@ -6,8 +6,18 @@ import os from 'node:os';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 
-const PW = process.env.PLAYWRIGHT_MODULE || '/opt/npm-tools/node_modules/playwright/index.mjs';
-const { chromium, devices } = await import(PW);
+import { createRequire } from 'node:module';
+import pg from 'pg';
+
+// Playwright: PLAYWRIGHT_MODULE, a local install, or a global one.
+async function loadPlaywright() {
+  const tries = [process.env.PLAYWRIGHT_MODULE, 'playwright'];
+  try { tries.push(createRequire(import.meta.url).resolve('playwright')); } catch { /* not local */ }
+  for (const dir of ['/opt/node-tools/node_modules', '/opt/npm-tools/node_modules', '/usr/local/lib/node_modules', '/usr/lib/node_modules']) tries.push(path.join(dir, 'playwright/index.mjs'));
+  for (const t of tries.filter(Boolean)) { try { const m = await import(t.startsWith('/') ? 'file://' + t : t); const pw = m.chromium ? m : m.default; if (pw?.chromium) return pw; } catch { /* next */ } }
+  throw new Error('Playwright not found. Install it (npm i -D playwright && npx playwright install chromium) or set PLAYWRIGHT_MODULE.');
+}
+const { chromium, devices } = await loadPlaywright();
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'maka-e2e-'));
@@ -21,7 +31,10 @@ const clip = path.join(dataDir, 'my-first-clip.mp4');
 execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=540x960:rate=25', '-f', 'lavfi', '-i', 'sine=frequency=440',
   '-t', '4', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', clip]);
 
-const server = spawn(process.execPath, ['--no-warnings=ExperimentalWarning', 'server/index.js'], { cwd: root, env: { ...process.env, PORT: String(port), MAKA_DATA_DIR: dataDir, PUBLIC_ORIGIN: base } });
+const databaseUrl = process.env.DATABASE_URL || 'postgres://postgres@localhost:5432/maka';
+const schema = 'maka_e2e_' + Math.random().toString(36).slice(2, 10);
+const server = spawn(process.execPath, ['--no-warnings=ExperimentalWarning', 'server/index.js'], { cwd: root,
+  env: { ...process.env, NODE_ENV: 'development', PORT: String(port), MAKA_DATA_DIR: dataDir, PUBLIC_ORIGIN: base, DATABASE_URL: databaseUrl, DATABASE_SCHEMA: schema, INVITE_CODE: '' } });
 let log = '';
 server.stdout.on('data', (d) => { log += d; }); server.stderr.on('data', (d) => { log += d; });
 for (let i = 0; i < 120 && !log.includes('Seeded sample data'); i++) await new Promise((r) => setTimeout(r, 500));
@@ -251,5 +264,8 @@ try {
 } finally {
   await browser.close();
   server.kill();
+  await new Promise((r) => setTimeout(r, 300));
+  const c = new pg.Client({ connectionString: databaseUrl });
+  await c.connect().then(() => c.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`)).catch((e) => console.error('schema cleanup:', e.message)).finally(() => c.end());
   fs.rmSync(dataDir, { recursive: true, force: true });
 }
