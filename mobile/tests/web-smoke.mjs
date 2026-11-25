@@ -25,8 +25,20 @@ const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'maka-mweb-'));
 const apiPort = 8900 + Math.floor(Math.random() * 50), webPort = apiPort + 50;
 const databaseUrl = process.env.DATABASE_URL || 'postgres://postgres@localhost:5432/maka';
 const schema = 'maka_mweb_' + Math.random().toString(36).slice(2, 10);
+// Stand-in for the Mux API so the Live host flow runs end to end (no real streaming account in tests).
+let muxStatus = 'idle';
+const fakeMux = http.createServer((req, res) => {
+  req.resume(); req.on('end', () => {
+    res.setHeader('content-type', 'application/json');
+    if (req.method === 'POST' && req.url === '/video/v1/live-streams') return res.end(JSON.stringify({ data: { id: 'mux_smoke', stream_key: 'smoke-stream-key-1234', playback_ids: [{ id: 'pb_smoke' }] } }));
+    if (req.method === 'GET') return res.end(JSON.stringify({ data: { id: 'mux_smoke', status: muxStatus } }));
+    res.end(JSON.stringify({ data: {} }));
+  });
+});
+await new Promise((r) => fakeMux.listen(0, r));
 const server = spawn(process.execPath, ['--no-warnings=ExperimentalWarning', 'server/index.js'], { cwd: root,
-  env: { ...process.env, NODE_ENV: 'development', PORT: String(apiPort), MAKA_DATA_DIR: dataDir, DATABASE_URL: databaseUrl, DATABASE_SCHEMA: schema, INVITE_CODE: '', PUBLIC_ORIGIN: `http://localhost:${webPort}` } });
+  env: { ...process.env, NODE_ENV: 'development', PORT: String(apiPort), MAKA_DATA_DIR: dataDir, DATABASE_URL: databaseUrl, DATABASE_SCHEMA: schema, INVITE_CODE: '', PUBLIC_ORIGIN: `http://localhost:${webPort}`,
+    LIVE_PROVIDER: 'mux', MUX_TOKEN_ID: 't', MUX_TOKEN_SECRET: 's', MUX_WEBHOOK_SECRET: 'w', MUX_API_BASE: `http://localhost:${fakeMux.address().port}` } });
 let log = ''; server.stdout.on('data', (d) => { log += d; }); server.stderr.on('data', (d) => { log += d; });
 for (let i = 0; i < 120 && !log.includes('Seeded sample data'); i++) await new Promise((r) => setTimeout(r, 500));
 if (!log.includes('Seeded sample data')) { console.error(log); process.exit(1); }
@@ -169,14 +181,22 @@ try {
     await page.goBack();
   });
 
-  await step('Live: says plainly it is not connected without a streaming provider', async () => {
+  await step('Live: host gets server and private key, goes live when the broadcast connects, ends it', async () => {
     await tab('Create a post').click();
     await page.getByRole('button', { name: 'Live' }).filter({ visible: true }).first().click();
     await tid('live-title').fill('Studio session');
     await tid('go-live').click();
-    await page.getByText(/streaming isn’t connected yet/i).first().waitFor();
-    await shot('live');
-    await page.goBack();
+    await page.getByText('Waiting for your broadcast').waitFor();
+    await page.getByText('rtmps://global-live.mux.com:443/app').waitFor();
+    assert.ok(!(await page.content()).includes('smoke-stream-key-1234'), 'stream key is masked on screen');
+    await page.getByText(/1234$/).first().waitFor();
+    await shot('live-waiting');
+    muxStatus = 'active';
+    await page.getByText('You’re live').waitFor({ timeout: 15000 });
+    await shot('live-on-air');
+    await tid('end-live').click();
+    await page.getByText('Your live has ended').waitFor();
+    await page.getByRole('button', { name: 'Done' }).click();
   });
 
   await step('Cinema: placeholder titles cannot play', async () => {
@@ -302,6 +322,7 @@ try {
   console.error('\nFAILED:', e.message, '\nPage errors:', errors, '\nServer log tail:\n', log.slice(-1500));
   process.exitCode = 1;
 } finally {
+  fakeMux.close();
   await browser.close();
   web.close(); server.kill();
   await new Promise((r) => setTimeout(r, 300));

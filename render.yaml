@@ -36,6 +36,14 @@ services:
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
+      - key: LIVE_PROVIDER        # mux (leave empty until your Mux account is ready)
+        sync: false
+      - key: MUX_TOKEN_ID
+        sync: false
+      - key: MUX_TOKEN_SECRET
+        sync: false
+      - key: MUX_WEBHOOK_SECRET
+        sync: false
       - key: MAIL_PROVIDER        # resend or postmark (password-reset email)
         sync: false
       - key: MAIL_API_KEY

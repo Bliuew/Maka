@@ -21,7 +21,7 @@ export default function WatchLive() {
   const toast = useToast();
   const { me } = useSession();
   const [report, setReport] = useState(false);
-  const { data, error, reload } = useLoad(async () => (await api.get('/api/live')).streams.find((x: any) => x.id === id) || null, [id]);
+  const { data, error, reload } = useLoad(async () => { try { return await api.get(`/api/live/${id}`); } catch (e: any) { if (e.status === 404) return false; throw e; } }, [id]);
   if (data === null && !error) return <Loading />;
   if (!data) return <Screen title="Live"><P muted>This live has ended.</P></Screen>;
   const host = data.host;

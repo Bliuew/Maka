@@ -596,3 +596,56 @@ test('Stripe: business onboarding, hosted checkout, signed webhooks mark orders 
     fake.close();
   }
 });
+
+test('Live with Mux: host gets an ingest key, goes live when the encoder connects, ends cleanly', async () => {
+  resetLimits();
+  const crypto = await import('node:crypto');
+  const http = await import('node:http');
+  const { createMux, setLiveProvider } = await import('../server/live.js');
+  const calls = []; let status = 'idle';
+  const fake = http.createServer((req, res) => {
+    let b = ''; req.on('data', (d) => { b += d; });
+    req.on('end', () => {
+      calls.push({ method: req.method, url: req.url, auth: req.headers.authorization, body: b ? JSON.parse(b) : null });
+      res.setHeader('content-type', 'application/json');
+      if (req.method === 'POST' && req.url === '/video/v1/live-streams') return res.end(JSON.stringify({ data: { id: 'mux_ls1', stream_key: 'sk-secret', playback_ids: [{ id: 'pb1' }] } }));
+      if (req.method === 'GET') return res.end(JSON.stringify({ data: { id: 'mux_ls1', status } }));
+      res.end(JSON.stringify({ data: {} }));
+    });
+  });
+  await new Promise((r) => fake.listen(0, r));
+  setLiveProvider(createMux({ MUX_TOKEN_ID: 'tid', MUX_TOKEN_SECRET: 'tsec', MUX_WEBHOOK_SECRET: 'mwh', MUX_API_BASE: `http://localhost:${fake.address().port}` }));
+  const hook = async (event, secret = 'mwh') => {
+    const raw = JSON.stringify(event), t = Math.floor(Date.now() / 1000);
+    const res = await fetch(base + '/api/live/webhook', { method: 'POST', headers: { 'content-type': 'application/json', 'mux-signature': `t=${t},v1=${crypto.createHmac('sha256', secret).update(`${t}.${raw}`).digest('hex')}` }, body: raw });
+    return res.status;
+  };
+  try {
+    const host = await adult(), viewer = await adult(), blocked = await adult();
+    await call('POST', `/api/users/${blocked.id}/block`, host.token);
+    const go = await call('POST', '/api/live', host.token, { title: 'Morning studio' });
+    assert.equal(go.status, 200, JSON.stringify(go.data));
+    assert.equal(go.data.streamKey, 'sk-secret'); assert.match(go.data.ingestUrl, /^rtmps:\/\//);
+    assert.equal(calls[0].auth, 'Basic ' + Buffer.from('tid:tsec').toString('base64'));
+    const row = await app.q.get('SELECT * FROM live_streams WHERE id=?', go.data.id);
+    assert.ok(!JSON.stringify(row).includes('sk-secret'), 'stream key is never stored');
+    assert.equal((await call('GET', '/api/live', viewer.token)).data.streams.length, 0, 'not listed until the broadcast starts');
+    assert.equal((await call('GET', `/api/live/${go.data.id}`, viewer.token)).status, 404);
+    assert.equal((await call('GET', `/api/live/${go.data.id}`, host.token)).data.status, 'created', 'host sees waiting state');
+    status = 'active';
+    const now = await call('GET', `/api/live/${go.data.id}`, host.token);
+    assert.equal(now.data.status, 'live', 'goes live once the encoder connects');
+    const seen = (await call('GET', '/api/live', viewer.token)).data.streams;
+    assert.equal(seen.length, 1); assert.equal(seen[0].playbackUrl, 'https://stream.mux.com/pb1.m3u8');
+    assert.equal((await call('GET', '/api/live', blocked.token)).data.streams.length, 0, 'blocked users cannot see the live');
+    assert.equal((await call('GET', `/api/live/${go.data.id}`, blocked.token)).status, 404);
+    assert.equal(await hook({ type: 'video.live_stream.idle', data: { id: 'mux_ls1' } }, 'forged'), 400, 'forged webhook refused');
+    assert.equal(await hook({ type: 'video.live_stream.idle', data: { id: 'mux_ls1' } }), 200);
+    assert.equal((await app.q.get('SELECT status FROM live_streams WHERE id=?', go.data.id)).status, 'ended', 'ends when the broadcast stops');
+    assert.ok(calls.some((c) => c.url === '/video/v1/live-streams/mux_ls1/disable'), 'stream key disabled at the provider');
+    assert.equal((await call('GET', '/api/live', viewer.token)).data.streams.length, 0);
+  } finally {
+    setLiveProvider(null);
+    fake.close();
+  }
+});

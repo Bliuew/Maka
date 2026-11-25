@@ -22,7 +22,43 @@ export function registerLive(r, ctx) {
     const rows = await q.all(`SELECT l.* FROM live_streams l WHERE l.status='live'
       AND l.host_id NOT IN (SELECT blocked_id FROM blocks WHERE blocker_id=?) AND l.host_id NOT IN (SELECT blocker_id FROM blocks WHERE blocked_id=?)
       ORDER BY l.started_at DESC LIMIT 50`, user.id, user.id);
-    return { configured: !!config.liveProvider, streams: await mapAsync(rows, (l) => ser(l, user.id)) };
+    return { configured: !!getLiveProvider().name, streams: await mapAsync(rows, (l) => ser(l, user.id)) };
+  });
+
+  // Moves a stream between waiting -> live -> ended. Called by the provider webhook and by GET below.
+  async function applyState(l, state) {
+    if (state === 'live' && l.status === 'created') {
+      await q.run("UPDATE live_streams SET status='live', started_at=? WHERE id=? AND status='created'", now(), l.id);
+    } else if (state === 'ended' && (l.status === 'live' || l.status === 'created')) {
+      await q.run("UPDATE live_streams SET status='ended', ended_at=? WHERE id=? AND status IN ('live','created')", now(), l.id);
+      if (l.status === 'live') await getLiveProvider().end(l.provider_ref).catch(() => {});
+    }
+  }
+
+  // One stream. While the host waits for their broadcast app to connect, this checks the provider.
+  r.get('/api/live/:id', {}, async ({ user, params }) => {
+    let l = (await q.get('SELECT * FROM live_streams WHERE id=?', params.id)) || fail(404, 'not_found');
+    if (await ctx.isBlockedEitherWay(user.id, l.host_id)) fail(404, 'not_found');
+    if (l.host_id !== user.id && l.status !== 'live') fail(404, 'not_found', 'This live has ended.');
+    const provider = getLiveProvider();
+    if (l.host_id === user.id && l.status === 'created' && l.provider_ref && provider.status) {
+      ctx.limiter.check('livestatus:' + user.id, 30, 30);
+      await applyState(l, await provider.status(l.provider_ref).catch(() => 'waiting'));
+      l = await q.get('SELECT * FROM live_streams WHERE id=?', l.id);
+    }
+    return ser(l, user.id);
+  });
+
+  r.post('/api/live/webhook', { auth: 'public' }, async ({ req, raw }) => {
+    const provider = getLiveProvider();
+    if (!provider.verifyWebhook) fail(503, 'live_not_configured');
+    let ev;
+    try { ev = provider.verifyWebhook(await raw(), req.headers); } catch (e) { fail(e.status || 400, e.code || 'invalid_signature'); }
+    if (ev?.providerRef) {
+      const l = await q.get('SELECT * FROM live_streams WHERE provider=? AND provider_ref=?', provider.name, ev.providerRef);
+      if (l) await applyState(l, ev.type);
+    }
+    return { received: true };
   });
 
   r.post('/api/live', {}, async ({ user, body }) => {
