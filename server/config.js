@@ -35,7 +35,8 @@ export const config = {
   defaultTerritory: env.DEFAULT_TERRITORY || 'CA',
 
   uploads: {
-    chunkSize: 1024 * 1024,
+    chunkSize: 4 * 1024 * 1024,        // suggested client chunk size
+    maxChunkBytes: 16 * 1024 * 1024,   // largest single PUT accepted
     maxVideoBytes: 500 * 1024 * 1024,
     maxImageBytes: 15 * 1024 * 1024,
     maxVideoSeconds: 600,
@@ -52,6 +53,8 @@ export function assertProductionSafe() {
   if (config.ageProvider === 'test') problems.push('AGE_PROVIDER=test (simulator) cannot run in production');
   if (!config.ageProviderKey) problems.push('AGE_PROVIDER_API_KEY missing');
   if (config.seedSamples) problems.push('SEED_SAMPLES must be 0 in production');
+  if (!process.env.DATABASE_URL) problems.push('DATABASE_URL (PostgreSQL) is not set');
+  if (!process.env.S3_BUCKET) problems.push('S3_BUCKET (object storage for media) is not set');
   if (problems.length) {
     throw new Error('Refusing to start in production:\n - ' + problems.join('\n - '));
   }

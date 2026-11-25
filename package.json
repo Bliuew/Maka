@@ -4,10 +4,16 @@
   "private": true,
   "description": "Mäka — Feel The Power Of Love Within You. 19+ social platform: API + mobile web client.",
   "type": "module",
-  "engines": { "node": ">=22.5" },
+  "engines": {
+    "node": ">=22.5"
+  },
   "scripts": {
     "start": "node --no-warnings=ExperimentalWarning server/index.js",
     "test": "node --no-warnings=ExperimentalWarning --test tests/api.test.js",
     "test:e2e": "node --no-warnings=ExperimentalWarning tests/e2e.mjs"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1177.0",
+    "pg": "^8.23.1"
   }
 }

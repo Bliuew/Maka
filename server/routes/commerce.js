@@ -5,17 +5,17 @@ import { screenText } from '../safety.js';
 const FORBIDDEN_CAMPAIGN_KEYS = /follower|tier|nano|micro|macro|mega|audience_?size|min_?reach/i;
 
 export function registerCommerce(r, ctx) {
-  const { q, config } = ctx;
+  const { q, config, mapAsync } = ctx;
 
-  const ownBusiness = (bid, user) => q.get('SELECT * FROM businesses WHERE id=? AND owner_id=?', bid, user.id) || fail(404, 'business_not_found');
+  const ownBusiness = async (bid, user) => (await q.get('SELECT * FROM businesses WHERE id=? AND owner_id=?', bid, user.id)) || fail(404, 'business_not_found');
   const serBiz = (b) => ({ id: b.id, name: b.name, category: b.category, description: b.description, website: b.website,
     verification: b.verification, isSample: !!b.is_sample });
-  const serCampaign = (c, user) => {
-    const b = q.get('SELECT * FROM businesses WHERE id=?', c.business_id);
-    const app = q.get('SELECT id,status FROM applications WHERE campaign_id=? AND creator_id=?', c.id, user.id);
+  const serCampaign = async (c, user) => {
+    const b = await q.get('SELECT * FROM businesses WHERE id=?', c.business_id);
+    const app = await q.get('SELECT id,status FROM applications WHERE campaign_id=? AND creator_id=?', c.id, user.id);
     return { id: c.id, title: c.title, category: c.category, brief: c.brief, deliverables: c.deliverables,
       compensationCents: c.compensation_cents, currency: c.currency, disclosure: c.disclosure, status: c.status,
-      deadline: c.deadline, imageUrl: ctx.assetUrl(c.image), isSample: !!c.is_sample, business: serBiz(b),
+      deadline: c.deadline, imageUrl: await ctx.assetUrl(c.image), isSample: !!c.is_sample, business: serBiz(b),
       eligibility: 'Open to every 19+ verified creator in good standing. No follower minimum. No tiers.',
       myApplication: app || null };
   };
@@ -28,23 +28,23 @@ export function registerCommerce(r, ctx) {
     if (!name || !b.category) fail(400, 'invalid_business', 'Name and category are required.');
     if (!b.registrationRef) fail(400, 'registration_required', 'Provide a business registration or tax number for verification.');
     const bid = id('b_');
-    q.run('INSERT INTO businesses (id,owner_id,name,category,description,website,registration_ref,created_at) VALUES (?,?,?,?,?,?,?,?)',
+    await q.run('INSERT INTO businesses (id,owner_id,name,category,description,website,registration_ref,created_at) VALUES (?,?,?,?,?,?,?,?)',
       bid, user.id, name, String(b.category).slice(0, 40), String(b.description || '').slice(0, 1000), b.website ? String(b.website).slice(0, 200) : null, String(b.registrationRef).slice(0, 80), now());
-    return { ...serBiz(q.get('SELECT * FROM businesses WHERE id=?', bid)), message: 'Submitted for verification. Campaigns and storefront unlock once a reviewer verifies your business.' };
+    return { ...serBiz(await q.get('SELECT * FROM businesses WHERE id=?', bid)), message: 'Submitted for verification. Campaigns and storefront unlock once a reviewer verifies your business.' };
   });
-  r.get('/api/me/businesses', {}, ({ user }) => q.all('SELECT * FROM businesses WHERE owner_id=?', user.id).map(serBiz));
+  r.get('/api/me/businesses', {}, async ({ user }) => (await q.all('SELECT * FROM businesses WHERE owner_id=?', user.id)).map(serBiz));
 
   // ---------------- collaborations ----------------
-  r.get('/api/campaigns', {}, ({ user, query }) => {
+  r.get('/api/campaigns', {}, async ({ user, query }) => {
     const cat = query.get('category');
-    const rows = q.all(`SELECT c.* FROM campaigns c JOIN businesses b ON b.id=c.business_id WHERE c.status='open' AND b.verification='verified'
+    const rows = await q.all(`SELECT c.* FROM campaigns c JOIN businesses b ON b.id=c.business_id WHERE c.status='open' AND b.verification='verified'
       ${cat ? 'AND c.category=?' : ''} ORDER BY c.created_at DESC`, ...(cat ? [cat] : []));
-    return { items: rows.map((c) => serCampaign(c, user)), categories: q.all("SELECT DISTINCT category FROM campaigns WHERE status='open'").map((x) => x.category) };
+    return { items: await mapAsync(rows, (c) => serCampaign(c, user)), categories: (await q.all("SELECT DISTINCT category FROM campaigns WHERE status='open' ORDER BY category")).map((x) => x.category) };
   });
-  r.get('/api/campaigns/:id', {}, ({ user, params }) => serCampaign(q.get('SELECT * FROM campaigns WHERE id=?', params.id) || fail(404, 'campaign_not_found'), user));
+  r.get('/api/campaigns/:id', {}, async ({ user, params }) => serCampaign((await q.get('SELECT * FROM campaigns WHERE id=?', params.id)) || fail(404, 'campaign_not_found'), user));
 
   r.post('/api/businesses/:id/campaigns', {}, async ({ user, params, body }) => {
-    const biz = ownBusiness(params.id, user);
+    const biz = await ownBusiness(params.id, user);
     if (biz.verification !== 'verified') fail(403, 'business_not_verified', 'Your business must be verified before posting campaigns.');
     const b = await body();
     const bad = Object.keys(b).find((k) => FORBIDDEN_CAMPAIGN_KEYS.test(k));
@@ -54,164 +54,168 @@ export function registerCommerce(r, ctx) {
     const cents = Math.round(Number(b.compensationCents));
     if (!b.title || !b.brief || !b.deliverables || !(cents > 0)) fail(400, 'invalid_campaign', 'Title, brief, deliverables and paid compensation are required.');
     const cid = id('cp_');
-    q.run('INSERT INTO campaigns (id,business_id,title,category,brief,deliverables,compensation_cents,currency,disclosure,deadline,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+    await q.run('INSERT INTO campaigns (id,business_id,title,category,brief,deliverables,compensation_cents,currency,disclosure,deadline,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
       cid, biz.id, String(b.title).slice(0, 100), String(b.category || biz.category), String(b.brief).slice(0, 4000), String(b.deliverables).slice(0, 1000),
       cents, String(b.currency || 'CAD'), String(b.disclosure || '#PaidPartnership'), b.deadline ? Date.parse(b.deadline) : null, now());
-    ctx.audit(user.id, 'campaign_create', 'campaign', cid, {});
-    return serCampaign(q.get('SELECT * FROM campaigns WHERE id=?', cid), user);
+    await ctx.audit(user.id, 'campaign_create', 'campaign', cid, {});
+    return serCampaign(await q.get('SELECT * FROM campaigns WHERE id=?', cid), user);
   });
 
   r.post('/api/campaigns/:id/apply', {}, async ({ user, params, body }) => {
     ctx.requireWrite(user);
-    const c = q.get('SELECT * FROM campaigns WHERE id=?', params.id) || fail(404, 'campaign_not_found');
+    const c = (await q.get('SELECT * FROM campaigns WHERE id=?', params.id)) || fail(404, 'campaign_not_found');
     if (c.status !== 'open') fail(409, 'campaign_closed');
-    const biz = q.get('SELECT * FROM businesses WHERE id=?', c.business_id);
+    const biz = await q.get('SELECT * FROM businesses WHERE id=?', c.business_id);
     if (biz.owner_id === user.id) fail(400, 'own_campaign');
-    if (ctx.isBlockedEitherWay(user.id, biz.owner_id)) fail(403, 'blocked');
+    if (await ctx.isBlockedEitherWay(user.id, biz.owner_id)) fail(403, 'blocked');
     // Eligibility = verified 19+ (enforced by gate) + good standing. Follower count is never consulted.
     const b = await body();
     const pitch = String(b.pitch || '').trim();
     if (pitch.length < 20) fail(400, 'pitch_too_short', 'Tell the brand about your idea in at least 20 characters.');
     if (screenText(pitch).action === 'hold') fail(400, 'pitch_not_allowed');
-    if (b.portfolioPostId && !q.get("SELECT 1 FROM posts WHERE id=? AND author_id=? AND status='published'", b.portfolioPostId, user.id)) fail(400, 'invalid_portfolio_post');
-    if (q.get('SELECT 1 FROM applications WHERE campaign_id=? AND creator_id=?', c.id, user.id)) fail(409, 'already_applied');
-    const owner = q.get('SELECT * FROM users WHERE id=?', biz.owner_id);
-    const cid = ctx.openConversation(user, [owner], `${c.title} · application`);
+    if (b.portfolioPostId && !await q.get("SELECT 1 FROM posts WHERE id=? AND author_id=? AND status='published'", b.portfolioPostId, user.id)) fail(400, 'invalid_portfolio_post');
+    if (await q.get('SELECT 1 FROM applications WHERE campaign_id=? AND creator_id=?', c.id, user.id)) fail(409, 'already_applied');
+    const owner = await q.get('SELECT * FROM users WHERE id=?', biz.owner_id);
+    const cid = await ctx.openConversation(user, [owner], `${c.title} · application`);
     const aid = id('ap_');
-    q.run('INSERT INTO applications (id,campaign_id,creator_id,pitch,portfolio_post_id,conversation_id,created_at) VALUES (?,?,?,?,?,?,?)', aid, c.id, user.id, pitch.slice(0, 3000), b.portfolioPostId || null, cid, now());
-    ctx.postMessage(cid, user, `Application for “${c.title}”: ${pitch.slice(0, 500)}`);
-    ctx.notify(owner.id, 'application', user.id, 'campaign', c.id, `@${user.handle} applied to ${c.title}`);
+    await q.run('INSERT INTO applications (id,campaign_id,creator_id,pitch,portfolio_post_id,conversation_id,created_at) VALUES (?,?,?,?,?,?,?)', aid, c.id, user.id, pitch.slice(0, 3000), b.portfolioPostId || null, cid, now());
+    await ctx.postMessage(cid, user, `Application for “${c.title}”: ${pitch.slice(0, 500)}`);
+    await ctx.notify(owner.id, 'application', user.id, 'campaign', c.id, `@${user.handle} applied to ${c.title}`);
     return { applicationId: aid, status: 'submitted', conversationId: cid };
   });
 
-  r.get('/api/me/applications', {}, ({ user }) => q.all('SELECT a.*, c.title FROM applications a JOIN campaigns c ON c.id=a.campaign_id WHERE a.creator_id=? ORDER BY a.created_at DESC', user.id)
-    .map((a) => ({ id: a.id, campaignId: a.campaign_id, title: a.title, status: a.status, conversationId: a.conversation_id, createdAt: a.created_at,
-      contract: q.get('SELECT id,status,amount_cents amountCents,currency FROM contracts WHERE application_id=?', a.id) || null })));
+  r.get('/api/me/applications', {}, async ({ user }) => mapAsync(await q.all('SELECT a.*, c.title FROM applications a JOIN campaigns c ON c.id=a.campaign_id WHERE a.creator_id=? ORDER BY a.created_at DESC', user.id),
+    async (a) => ({ id: a.id, campaignId: a.campaign_id, title: a.title, status: a.status, conversationId: a.conversation_id, createdAt: a.created_at,
+      contract: (await q.get('SELECT id,status,amount_cents "amountCents",currency FROM contracts WHERE application_id=?', a.id)) || null })));
 
   // Business view of applicants: ordered by submission time, with objective
   // signals (pitch, portfolio, completed collaborations). Not sortable by followers.
-  r.get('/api/businesses/:id/applications', {}, ({ user, params }) => {
-    const biz = ownBusiness(params.id, user);
-    return q.all('SELECT a.*, c.title FROM applications a JOIN campaigns c ON c.id=a.campaign_id WHERE c.business_id=? ORDER BY a.created_at ASC', biz.id).map((a) => ({
+  r.get('/api/businesses/:id/applications', {}, async ({ user, params }) => {
+    const biz = await ownBusiness(params.id, user);
+    return mapAsync(await q.all('SELECT a.*, c.title FROM applications a JOIN campaigns c ON c.id=a.campaign_id WHERE c.business_id=? ORDER BY a.created_at ASC', biz.id), async (a) => ({
       id: a.id, campaign: a.title, status: a.status, pitch: a.pitch, conversationId: a.conversation_id,
-      portfolio: a.portfolio_post_id ? ctx.serializePost(q.get('SELECT * FROM posts WHERE id=?', a.portfolio_post_id), user.id) : null,
-      creator: ctx.publicUser(q.get('SELECT * FROM users WHERE id=?', a.creator_id), user.id),
-      completedCollaborations: q.get("SELECT COUNT(*) n FROM contracts k JOIN applications x ON x.id=k.application_id WHERE x.creator_id=? AND k.status IN ('approved','payout_pending','paid')", a.creator_id).n,
+      portfolio: a.portfolio_post_id ? await ctx.serializePost(await q.get('SELECT * FROM posts WHERE id=?', a.portfolio_post_id), user.id) : null,
+      creator: await ctx.publicUser(await q.get('SELECT * FROM users WHERE id=?', a.creator_id), user.id),
+      completedCollaborations: (await q.get("SELECT COUNT(*) n FROM contracts k JOIN applications x ON x.id=k.application_id WHERE x.creator_id=? AND k.status IN ('approved','payout_pending','paid')", a.creator_id)).n,
     }));
   });
 
   r.post('/api/applications/:id/decision', {}, async ({ user, params, body }) => {
-    const a = q.get('SELECT a.*, c.business_id, c.compensation_cents, c.currency, c.title, c.deliverables, c.disclosure FROM applications a JOIN campaigns c ON c.id=a.campaign_id WHERE a.id=?', params.id) || fail(404, 'not_found');
-    ownBusiness(a.business_id, user);
+    const a = (await q.get('SELECT a.*, c.business_id, c.compensation_cents, c.currency, c.title, c.deliverables, c.disclosure FROM applications a JOIN campaigns c ON c.id=a.campaign_id WHERE a.id=?', params.id)) || fail(404, 'not_found');
+    await ownBusiness(a.business_id, user);
     const { status } = await body();
     if (!['shortlisted', 'accepted', 'declined'].includes(status)) fail(400, 'invalid_status');
-    q.run('UPDATE applications SET status=? WHERE id=?', status, a.id);
+    await q.run('UPDATE applications SET status=? WHERE id=?', status, a.id);
     let contractId = null;
-    if (status === 'accepted' && !q.get('SELECT 1 FROM contracts WHERE application_id=?', a.id)) {
+    if (status === 'accepted' && !await q.get('SELECT 1 FROM contracts WHERE application_id=?', a.id)) {
       contractId = id('k_');
-      q.run('INSERT INTO contracts (id,application_id,amount_cents,currency,terms,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)', contractId, a.id, a.compensation_cents, a.currency,
+      await q.run('INSERT INTO contracts (id,application_id,amount_cents,currency,terms,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)', contractId, a.id, a.compensation_cents, a.currency,
         `Deliverables: ${a.deliverables}\nDisclosure required: ${a.disclosure}\nCreator keeps ownership of original content; brand receives the usage licence described in the brief.`, 'offered', now(), now());
     }
-    ctx.notify(a.creator_id, 'application_' + status, user.id, 'application', a.id, `Your application to ${a.title} was ${status}`);
-    ctx.audit(user.id, 'application_' + status, 'application', a.id, {});
+    await ctx.notify(a.creator_id, 'application_' + status, user.id, 'application', a.id, `Your application to ${a.title} was ${status}`);
+    await ctx.audit(user.id, 'application_' + status, 'application', a.id, {});
     return { status, contractId };
   });
 
   // Contract lifecycle. Money movement requires a payment provider.
   const transitions = { sign: ['offered', 'signed', 'creator'], deliver: ['signed', 'delivered', 'creator'], approve: ['delivered', 'approved', 'business'], dispute: [null, 'disputed', 'either'] };
-  r.post('/api/contracts/:id/:action', {}, ({ user, params }) => {
+  r.post('/api/contracts/:id/:action', {}, async ({ user, params }) => {
     const t = transitions[params.action] || fail(404, 'not_found');
-    const k = q.get('SELECT k.*, a.creator_id, c.business_id FROM contracts k JOIN applications a ON a.id=k.application_id JOIN campaigns c ON c.id=a.campaign_id WHERE k.id=?', params.id) || fail(404, 'not_found');
-    const biz = q.get('SELECT * FROM businesses WHERE id=?', k.business_id);
+    const k = (await q.get('SELECT k.*, a.creator_id, c.business_id FROM contracts k JOIN applications a ON a.id=k.application_id JOIN campaigns c ON c.id=a.campaign_id WHERE k.id=?', params.id)) || fail(404, 'not_found');
+    const biz = await q.get('SELECT * FROM businesses WHERE id=?', k.business_id);
     const role = user.id === k.creator_id ? 'creator' : user.id === biz.owner_id ? 'business' : null;
     if (!role || (t[2] !== 'either' && t[2] !== role)) fail(403, 'forbidden');
     if (t[0] && k.status !== t[0]) fail(409, 'invalid_state', `Contract is ${k.status}.`);
     let next = t[1];
-    if (next === 'approved') {
-      // Record real earned revenue. It becomes available once the business's payment clears.
-      q.run('INSERT INTO earnings (id,user_id,source,ref_id,amount_cents,currency,status,created_at) VALUES (?,?,?,?,?,?,?,?)', id('e_'), k.creator_id, 'collab', k.id, k.amount_cents, k.currency, 'pending', now());
-      next = 'payout_pending';
-    }
-    q.run('UPDATE contracts SET status=?, updated_at=? WHERE id=?', next, now(), k.id);
-    ctx.audit(user.id, 'contract_' + params.action, 'contract', k.id, {});
+    await q.tx(async () => {
+      if (next === 'approved') {
+        // Record real earned revenue. It becomes available once the business's payment clears.
+        await q.run('INSERT INTO earnings (id,user_id,source,ref_id,amount_cents,currency,status,created_at) VALUES (?,?,?,?,?,?,?,?)', id('e_'), k.creator_id, 'collab', k.id, k.amount_cents, k.currency, 'pending', now());
+        next = 'payout_pending';
+      }
+      await q.run('UPDATE contracts SET status=?, updated_at=? WHERE id=?', next, now(), k.id);
+      await ctx.audit(user.id, 'contract_' + params.action, 'contract', k.id, {});
+    });
     return { status: next, paymentsConfigured: !!config.paymentsProvider,
       note: next === 'payout_pending' && !config.paymentsProvider ? 'Approved. Funds move once a payment provider (e.g. Stripe Connect) is connected.' : null };
   });
 
   // ---------------- marketplace ----------------
-  const serProduct = (p) => ({ id: p.id, businessId: p.business_id, name: p.name, description: p.description, priceCents: p.price_cents,
-    currency: p.currency, imageUrl: ctx.assetUrl(p.image), inStock: p.stock > 0, stock: p.stock, isSample: !!p.is_sample });
+  const serProduct = async (p) => ({ id: p.id, businessId: p.business_id, name: p.name, description: p.description, priceCents: p.price_cents,
+    currency: p.currency, imageUrl: await ctx.assetUrl(p.image), inStock: p.stock > 0, stock: p.stock, isSample: !!p.is_sample });
 
-  r.get('/api/market/businesses', {}, ({ query }) => {
+  r.get('/api/market/businesses', {}, async ({ query }) => {
     const term = (query.get('q') || '').toLowerCase(), cat = query.get('category');
-    let rows = q.all("SELECT * FROM businesses WHERE verification='verified' ORDER BY name");
+    let rows = await q.all(`SELECT b.*, (SELECT string_agg(name, ' ') FROM products WHERE business_id=b.id) product_names
+      FROM businesses b WHERE verification='verified' ORDER BY name`);
     if (cat) rows = rows.filter((b) => b.category === cat);
-    if (term) rows = rows.filter((b) => (b.name + ' ' + b.category + ' ' + b.description + ' ' +
-      q.all('SELECT name FROM products WHERE business_id=?', b.id).map((p) => p.name).join(' ')).toLowerCase().includes(term));
-    return { items: rows.map((b) => ({ ...serBiz(b), coverUrl: ctx.assetUrl(q.get('SELECT image FROM products WHERE business_id=? AND active=1 LIMIT 1', b.id)?.image),
-      productCount: q.get('SELECT COUNT(*) n FROM products WHERE business_id=? AND active=1', b.id).n })),
-      categories: q.all("SELECT DISTINCT category FROM businesses WHERE verification='verified'").map((x) => x.category) };
+    if (term) rows = rows.filter((b) => (b.name + ' ' + b.category + ' ' + b.description + ' ' + (b.product_names || '')).toLowerCase().includes(term));
+    return { items: await mapAsync(rows, async (b) => ({ ...serBiz(b), coverUrl: await ctx.assetUrl((await q.get('SELECT image FROM products WHERE business_id=? AND active=1 ORDER BY created_at LIMIT 1', b.id))?.image),
+      productCount: (await q.get('SELECT COUNT(*) n FROM products WHERE business_id=? AND active=1', b.id)).n })),
+      categories: (await q.all("SELECT DISTINCT category FROM businesses WHERE verification='verified' ORDER BY category")).map((x) => x.category) };
   });
-  r.get('/api/market/businesses/:id', {}, ({ params }) => {
-    const b = q.get("SELECT * FROM businesses WHERE id=? AND verification='verified'", params.id) || fail(404, 'store_not_found');
-    return { business: serBiz(b), products: q.all('SELECT * FROM products WHERE business_id=? AND active=1 ORDER BY created_at', b.id).map(serProduct) };
+  r.get('/api/market/businesses/:id', {}, async ({ params }) => {
+    const b = (await q.get("SELECT * FROM businesses WHERE id=? AND verification='verified'", params.id)) || fail(404, 'store_not_found');
+    return { business: serBiz(b), products: await mapAsync(await q.all('SELECT * FROM products WHERE business_id=? AND active=1 ORDER BY created_at', b.id), serProduct) };
   });
   r.post('/api/businesses/:id/products', {}, async ({ user, params, body }) => {
-    const biz = ownBusiness(params.id, user);
+    const biz = await ownBusiness(params.id, user);
     if (biz.verification !== 'verified') fail(403, 'business_not_verified');
     const b = await body();
     const cents = Math.round(Number(b.priceCents));
     if (!b.name || !(cents >= 0)) fail(400, 'invalid_product');
+    if (b.imageMediaId && !await q.get("SELECT 1 FROM media WHERE id=? AND owner_id=? AND kind='image'", b.imageMediaId, user.id)) fail(400, 'invalid_media');
     const pid = id('pr_');
-    q.run('INSERT INTO products (id,business_id,name,description,price_cents,currency,image,stock,created_at) VALUES (?,?,?,?,?,?,?,?,?)',
+    await q.run('INSERT INTO products (id,business_id,name,description,price_cents,currency,image,stock,created_at) VALUES (?,?,?,?,?,?,?,?,?)',
       pid, biz.id, String(b.name).slice(0, 100), String(b.description || '').slice(0, 2000), cents, String(b.currency || 'CAD'), b.imageMediaId || null, Math.max(0, Number(b.stock) | 0), now());
-    return serProduct(q.get('SELECT * FROM products WHERE id=?', pid));
+    return serProduct(await q.get('SELECT * FROM products WHERE id=?', pid));
   });
 
   r.post('/api/orders', {}, async ({ user, body }) => {
     const b = await body();
     const items = Array.isArray(b.items) ? b.items : [];
     if (!items.length) fail(400, 'empty_cart');
-    const biz = q.get("SELECT * FROM businesses WHERE id=? AND verification='verified'", b.businessId) || fail(404, 'store_not_found');
+    const biz = (await q.get("SELECT * FROM businesses WHERE id=? AND verification='verified'", b.businessId)) || fail(404, 'store_not_found');
     let total = 0, currency = null;
-    const lines = items.map((it) => {
-      const p = q.get('SELECT * FROM products WHERE id=? AND business_id=? AND active=1', it.productId, biz.id) || fail(400, 'invalid_product');
+    const lines = [];
+    for (const it of items) {
+      const p = (await q.get('SELECT * FROM products WHERE id=? AND business_id=? AND active=1', it.productId, biz.id)) || fail(400, 'invalid_product');
       const qty = Math.floor(Number(it.qty));
       if (!(qty >= 1 && qty <= 20)) fail(400, 'invalid_quantity');
       if (p.stock < qty) fail(409, 'out_of_stock', `${p.name} is out of stock.`);
       if (currency && currency !== p.currency) fail(400, 'mixed_currency');
       currency = p.currency; total += p.price_cents * qty; // prices always computed server-side
-      return { p, qty };
-    });
+      lines.push({ p, qty });
+    }
     const oid = id('o_');
-    q.tx(() => {
-      q.run('INSERT INTO orders (id,buyer_id,business_id,status,total_cents,currency,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)', oid, user.id, biz.id, 'awaiting_payment', total, currency, now(), now());
-      for (const l of lines) q.run('INSERT INTO order_items (order_id,product_id,qty,unit_cents) VALUES (?,?,?,?)', oid, l.p.id, l.qty, l.p.price_cents);
+    await q.tx(async () => {
+      await q.run('INSERT INTO orders (id,buyer_id,business_id,status,total_cents,currency,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)', oid, user.id, biz.id, 'awaiting_payment', total, currency, now(), now());
+      for (const l of lines) await q.run('INSERT INTO order_items (order_id,product_id,qty,unit_cents) VALUES (?,?,?,?)', oid, l.p.id, l.qty, l.p.price_cents);
     });
     return { orderId: oid, status: 'awaiting_payment', totalCents: total, currency };
   });
 
-  r.post('/api/orders/:id/checkout', {}, ({ user, params }) => {
-    const o = q.get('SELECT * FROM orders WHERE id=? AND buyer_id=?', params.id, user.id) || fail(404, 'order_not_found');
+  r.post('/api/orders/:id/checkout', {}, async ({ user, params }) => {
+    const o = (await q.get('SELECT * FROM orders WHERE id=? AND buyer_id=?', params.id, user.id)) || fail(404, 'order_not_found');
     if (o.status !== 'awaiting_payment') fail(409, 'invalid_state');
     // Real flow: create a provider PaymentIntent / Checkout Session and return its client secret.
     // Card data is entered in the provider's UI and never touches Mäka servers.
     if (!config.paymentsProvider) fail(503, 'payments_not_configured', 'Checkout is not live yet. Your order is saved; no payment has been taken.');
     fail(501, 'payments_adapter_missing');
   });
-  r.post('/api/orders/:id/cancel', {}, ({ user, params }) => {
-    const o = q.get('SELECT * FROM orders WHERE id=? AND buyer_id=?', params.id, user.id) || fail(404, 'order_not_found');
+  r.post('/api/orders/:id/cancel', {}, async ({ user, params }) => {
+    const o = (await q.get('SELECT * FROM orders WHERE id=? AND buyer_id=?', params.id, user.id)) || fail(404, 'order_not_found');
     if (o.status !== 'awaiting_payment') fail(409, 'invalid_state', 'Paid orders need a refund request instead.');
-    q.run("UPDATE orders SET status='cancelled', updated_at=? WHERE id=?", now(), o.id);
+    await q.run("UPDATE orders SET status='cancelled', updated_at=? WHERE id=?", now(), o.id);
     return { status: 'cancelled' };
   });
-  r.post('/api/orders/:id/refund-request', {}, ({ user, params }) => {
-    const o = q.get('SELECT * FROM orders WHERE id=? AND buyer_id=?', params.id, user.id) || fail(404, 'order_not_found');
+  r.post('/api/orders/:id/refund-request', {}, async ({ user, params }) => {
+    const o = (await q.get('SELECT * FROM orders WHERE id=? AND buyer_id=?', params.id, user.id)) || fail(404, 'order_not_found');
     if (!['paid', 'fulfilled'].includes(o.status)) fail(409, 'invalid_state');
-    q.run("UPDATE orders SET status='refund_requested', updated_at=? WHERE id=?", now(), o.id);
+    await q.run("UPDATE orders SET status='refund_requested', updated_at=? WHERE id=?", now(), o.id);
     return { status: 'refund_requested' };
   });
-  r.get('/api/me/orders', {}, ({ user }) => q.all('SELECT o.*, b.name business FROM orders o JOIN businesses b ON b.id=o.business_id WHERE buyer_id=? ORDER BY o.created_at DESC', user.id).map((o) => ({
+  r.get('/api/me/orders', {}, async ({ user }) => mapAsync(await q.all('SELECT o.*, b.name business FROM orders o JOIN businesses b ON b.id=o.business_id WHERE buyer_id=? ORDER BY o.created_at DESC', user.id), async (o) => ({
     id: o.id, business: o.business, status: o.status, totalCents: o.total_cents, currency: o.currency, createdAt: o.created_at,
-    items: q.all('SELECT oi.qty, oi.unit_cents unitCents, p.name FROM order_items oi JOIN products p ON p.id=oi.product_id WHERE oi.order_id=?', o.id) })));
+    items: await q.all('SELECT oi.qty, oi.unit_cents "unitCents", p.name FROM order_items oi JOIN products p ON p.id=oi.product_id WHERE oi.order_id=?', o.id) })));
 }
