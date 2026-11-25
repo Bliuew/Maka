@@ -31,7 +31,7 @@ concurrency:
 jobs:
   simulator:
     name: Compile for iOS Simulator
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 90
     env:
       EXPO_PUBLIC_API_URL: ${{ vars.MAKA_API_URL }}
@@ -46,7 +46,7 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: mobile/package-lock.json
-      - name: Use the newest Xcode (this SDK needs Swift 6.2 / Xcode 26 or later)
+      - name: Use the newest Xcode (Expo SDK 58 targets Xcode 27)
         run: |
           XC=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
           echo "Selecting $XC"
