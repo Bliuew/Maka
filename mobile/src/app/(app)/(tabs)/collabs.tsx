@@ -31,14 +31,12 @@ export default function Collabs() {
   const apply = async () => {
     try {
       await api.post(`/api/campaigns/${open.id}/apply`, { pitch, portfolioPostId: pf || null });
-      setOpen(null); toast.show('Application sent — the brand can now message you'); reload();
+      setOpen(null); toast.show('Application sent'); reload();
     } catch (e) { toast.error(e); }
   };
   return (
     <Screen title="Collabs" onRefresh={() => reload(true)} refreshing={refreshing}
-      intro="Paid briefs from verified businesses, open to every verified creator.">
-      <Card><Text style={{ color: colors.gold, fontWeight: '800' }}>Talent over follower count.</Text>
-        <P>No nano, micro or mega tiers and no follower minimums. Brands choose on fit, creativity, quality and reliability.</P></Card>
+      intro="Paid briefs from verified businesses.">
       <Pills label="Category" value={cat} onChange={setCat} options={[{ value: '', label: 'All' }, ...data.categories.map((c: string) => ({ value: c, label: c }))]} />
       <SectionTitle>Open briefs ({data.items.length})</SectionTitle>
       {data.items.length ? data.items.map((c: any) => (
@@ -61,7 +59,6 @@ export default function Collabs() {
         <ListItem key={a.id} title={a.title} subtitle={a.status + (a.contract ? ' · contract ' + a.contract.status : '')}
           right={<Button title="Messages" small variant="secondary" onPress={() => router.push(`/inbox/${a.conversationId}`)} />} />
       ))}
-      <P muted style={{ marginTop: 16 }}>Sample briefs are fictional. Real campaigns require a verified business, disclosure, a contract, and a connected payment provider before money moves.</P>
       <Sheet visible={!!open} title={open?.title || ''} onClose={() => setOpen(null)}>
         {open ? (
           <>
@@ -69,7 +66,7 @@ export default function Collabs() {
             <P><Text style={{ fontWeight: '800' }}>Deliverables:</Text> {open.deliverables}</P>
             <P><Text style={{ fontWeight: '800' }}>Pay:</Text> {money(open.compensationCents, open.currency)} · <Text style={{ fontWeight: '800' }}>Disclosure:</Text> {open.disclosure}</P>
             <P><Text style={{ fontWeight: '800' }}>Business:</Text> {open.business.name} (verified)</P>
-            <Banner>{open.eligibility}{open.isSample ? ' This is a sample brief — no business will pay through it.' : ''}</Banner>
+            <P muted>{open.eligibility}{open.isSample ? ' Sample brief: no business pays through it.' : ''}</P>
             {open.myApplication ? <Tag tone="green">You applied · {open.myApplication.status}</Tag> : (
               <>
                 <Field label="Your pitch" value={pitch} onChangeText={setPitch} multiline placeholder="Your idea, why it fits, and how you’ll deliver it." testID="pitch" />

@@ -35,7 +35,7 @@ export default function Verify() {
 
   return (
     <Screen title="Confirm you’re 19 or older" onRefresh={() => refreshMe().catch(() => {})}
-      intro="Choose one method. We keep only the result — never your ID images or selfie.">
+      intro="Pick one method. We only keep the result, never your ID or selfie.">
       {data.isTestMode ? <Banner test>TEST MODE. No real age-verification provider is connected yet. The next step is a simulator for development and testing only. Production will not start in this mode.</Banner> : null}
       {msg ? <Banner>{msg}</Banner> : null}
       {st === 'review' ? null : (

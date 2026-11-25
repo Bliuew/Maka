@@ -58,7 +58,6 @@ export function CommentsSheet({ postId, visible, onClose, onCountChange }: { pos
   const del = async (id: string) => { try { await api.del('/api/comments/' + id); await load(); onCountChange?.(); } catch (e) { toast.error(e); } };
   return (
     <Sheet visible={visible} title="Comments" onClose={close}>
-      <Banner>Respectful discussion only. Constructive criticism is welcome; harassment, racism, threats and ridicule are not.</Banner>
       {!data ? <Empty>Loading…</Empty> : data.comments.length ? data.comments.map((c: any) => (
         <View key={c.id} style={{ flexDirection: 'row', gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#221f24' }} testID="comment">
           <Avatar user={c.author} size={30} />
@@ -71,13 +70,13 @@ export function CommentsSheet({ postId, visible, onClose, onCountChange }: { pos
               </Row>
             </Row>
             <P>{c.body}</P>
-            {c.status === 'held' ? <Tag>Held for review — only you can see this</Tag> : null}
+            {c.status === 'held' ? <Tag>Held for review · only you can see this</Tag> : null}
           </View>
         </View>
       )) : <Empty>No comments yet. Start a kind conversation.</Empty>}
       {data?.allowComments ? (
         <>
-          <Field label="Add a comment" value={text} onChangeText={setText} multiline maxLength={500} placeholder="Add a respectful comment…" testID="comment-input" />
+          <Field label="Add a comment" value={text} onChangeText={setText} multiline maxLength={500} placeholder="Add a comment…" testID="comment-input" />
           <Button title="Post comment" onPress={send} disabled={!text.trim()} block testID="comment-send" />
         </>
       ) : data ? <P muted>The creator has turned off comments.</P> : null}
@@ -110,13 +109,13 @@ function ReportForm({ target, onClose, onBlocked }: { target: ReportTarget; onCl
   const submit = async () => {
     try {
       const r = await api.post('/api/reports', { targetType: target.type, targetId: target.id, reason, details, alsoBlock });
-      onClose(); toast.show(r.blocked ? 'Reported and blocked' : 'Report submitted — thank you');
+      onClose(); toast.show(r.blocked ? 'Reported and blocked' : 'Thanks, we’ll take a look');
       if (r.blocked) onBlocked?.();
     } catch (e) { toast.error(e); }
   };
   return (
     <>
-      <P>Reports are reviewed by trained people. The person won’t be told who reported them.</P>
+      <P muted>Your report is anonymous.</P>
       {reasons ? <Choice label="Reason" value={reason} onChange={setReason} options={Object.entries(reasons).map(([value, label]) => ({ value, label }))} /> : <Empty>Loading…</Empty>}
       <Field label="Details (optional)" value={details} onChangeText={setDetails} multiline maxLength={1000} />
       <Check label="Also block this person" value={alsoBlock} onChange={setAlsoBlock} testID="report-also-block" />

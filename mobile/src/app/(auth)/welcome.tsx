@@ -3,16 +3,10 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, Field, Icon, Text, type IconName } from '../../components/ui';
+import { Button, Field, Text } from '../../components/ui';
 import { BRAND, TAGLINE, colors, font, type } from '../../lib/theme';
 import { serverUrl, setServerUrl } from '../../lib/client';
 import { useToast } from '../../lib/toast';
-
-const POINTS: [IconName, string, string][] = [
-  ['play-circle-outline', 'Create and discover', 'Short videos ranked on quality, never on follower counts.'],
-  ['shield-checkmark-outline', 'Kind by design', 'Abuse is held for review. Report, block and mute in one tap.'],
-  ['film-outline', 'Free cinema and fair collabs', 'Licensed films, and paid briefs open to every creator.'],
-];
 
 export default function Welcome() {
   const router = useRouter();
@@ -25,18 +19,7 @@ export default function Welcome() {
       <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <View style={s.logoCard}>
           {/* Founder-approved wordmark, used unchanged. */}
-          <Image source={require('../../../assets/brand/approved-logo.webp')} style={s.logo} contentFit="contain" accessibilityLabel={`${BRAND} — ${TAGLINE}`} testID="approved-logo" />
-        </View>
-        <View style={s.points}>
-          {POINTS.map(([icon, title, text]) => (
-            <View key={title} style={s.point} accessible accessibilityLabel={`${title}. ${text}`}>
-              <View style={s.pointIcon}><Icon name={icon} size={22} color={colors.gold} /></View>
-              <View style={{ flex: 1 }}>
-                <Text style={type.bodyStrong}>{title}</Text>
-                <Text style={[type.callout, { color: colors.muted, marginTop: 2 }]}>{text}</Text>
-              </View>
-            </View>
-          ))}
+          <Image source={require('../../../assets/brand/approved-logo.webp')} style={s.logo} contentFit="contain" accessibilityLabel={`${BRAND}. ${TAGLINE}`} testID="approved-logo" />
         </View>
         {showServer ? (
           <View style={{ marginTop: 8 }}>
@@ -49,7 +32,7 @@ export default function Welcome() {
         <Button title="Create account" block onPress={() => router.push('/signup')} />
         <Button title="Sign in" variant="secondary" block onPress={() => router.push('/signin')} />
         <Text style={s.legal}>
-          <Text style={{ fontFamily: font.semibold, color: colors.text }}>Strictly 19+.</Text> You’ll confirm your age with one privacy-first method before using {BRAND}.
+          <Text style={{ fontFamily: font.semibold, color: colors.text }}>Strictly 19+.</Text> You’ll verify your age before you start.
         </Text>
         <Pressable onPress={() => setShowServer(!showServer)} accessibilityRole="button" accessibilityLabel={showServer ? 'Hide server settings' : 'Server settings (test builds)'} hitSlop={8}>
           <Text style={s.server}>{showServer ? 'Hide server settings' : 'Server settings'}</Text>
@@ -61,12 +44,9 @@ export default function Welcome() {
 
 const s = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.bg },
-  scroll: { paddingHorizontal: 20, paddingTop: 28 },
+  scroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 28, paddingTop: 28 },
   logoCard: { backgroundColor: colors.cream, borderRadius: 24, padding: 6, overflow: 'hidden' },
   logo: { width: '100%', aspectRatio: 512 / 341 },
-  points: { marginTop: 28, gap: 18 },
-  point: { flexDirection: 'row', gap: 14, alignItems: 'center' },
-  pointIcon: { width: 44, height: 44, borderRadius: 12, backgroundColor: colors.goldSoft, alignItems: 'center', justifyContent: 'center' },
   ctas: { paddingHorizontal: 20, paddingTop: 8 },
   legal: { ...type.caption, color: colors.muted, textAlign: 'center', marginTop: 14, lineHeight: 17 },
   server: { ...type.caption, color: colors.faint, textAlign: 'center', marginTop: 10, textDecorationLine: 'underline' },

@@ -31,7 +31,7 @@ export default function Storefront() {
   };
   return (
     <Screen title={data.business.name} intro={data.business.description}>
-      <Row wrap><Tag tone="green">Verified business</Tag>{data.business.isSample ? <Tag tone="grey">Sample store — not a real business</Tag> : null}</Row>
+      <Row wrap><Tag tone="green">Verified business</Tag>{data.business.isSample ? <Tag tone="grey">Sample store</Tag> : null}</Row>
       <View style={s.grid}>
         {data.products.map((p: any) => (
           <View key={p.id} style={s.tile} accessible={false}>

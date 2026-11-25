@@ -8,7 +8,7 @@ const TAGLINE = 'Feel The Power Of Love Within You';
 
 screens.welcome = (el) => {
   el.innerHTML = `<div class="auth">
-    <div class="logo-card"><img src="/assets/approved-logo.webp" alt="Mäka — ${TAGLINE}"></div>
+    <div class="logo-card"><img src="/assets/approved-logo.webp" alt="Mäka. ${TAGLINE}"></div>
     <p class="subtle" style="text-align:center;margin:0 0 18px">A respectful community for creators, film lovers and businesses. <strong>Strictly 19+.</strong></p>
     <div class="stack"><button class="button block" data-go="signup">Create account</button><button class="button secondary block" data-go="signin">Sign in</button></div>
     <p class="subtle" style="text-align:center;margin-top:18px">You’ll confirm you are 19 or older with a privacy-first verification method before you can use Mäka.</p></div>`;
@@ -55,8 +55,8 @@ screens.verify = async (el) => {
   const msg = { pending: 'You started a check. You can continue it or choose another method.', failed: 'That check didn’t complete. You can try again or pick another method.',
     review: 'Your verification is under review by our team. We’ll notify you when it’s done.' }[st] || '';
   el.innerHTML = `<div class="auth">
-    <span class="eyebrow">Step 2 of 2 · Strictly 19+</span><h1 style="margin:6px 0">Confirm you’re 19 or older</h1>
-    <p class="subtle">Choose <strong>one</strong> method that works for you. We only keep the result (“over 19: yes”) — never your ID images or selfie.</p>
+    <h1 style="margin:6px 0">Confirm you’re 19 or older</h1>
+    <p class="subtle">Choose <strong>one</strong> method that works for you. We only keep the result, never your ID or selfie.</p>
     ${m.isTestMode ? '<div class="banner test"><strong>TEST MODE.</strong> No real age-verification provider is connected yet. The next step is a simulator for development and testing only. Production will not start in this mode.</div>' : ''}
     ${msg ? `<div class="banner">${esc(msg)}</div>` : ''}
     ${st === 'review' ? '' : `<form data-form="ageStart">${m.methods.map((x, i) => `<label class="method ${i === 0 ? 'sel' : ''}"><input class="sr" type="radio" name="method" value="${x.id}" ${i === 0 ? 'checked' : ''}><strong>${esc(x.label)}</strong><span>${esc(x.note)}</span></label>`).join('')}
@@ -71,7 +71,7 @@ forms.ageStart = async (f) => {
 };
 
 screens['age-test'] = (el, checkId) => {
-  el.innerHTML = `<div class="auth"><div class="banner test"><strong>AGE-VERIFICATION SIMULATOR — TEST ONLY.</strong> This page stands in for a real provider’s hosted check so the rest of Mäka can be developed and tested. It verifies nothing.</div>
+  el.innerHTML = `<div class="auth"><div class="banner test"><strong>AGE-VERIFICATION SIMULATOR (TEST ONLY).</strong> This page stands in for a real provider’s hosted check so the rest of Mäka can be developed and tested. It verifies nothing.</div>
     <h1 style="margin:6px 0 12px">Simulated result</h1>
     <label class="formlabel" for="tid">Test identity (used to demo ban-evasion checks)</label><input id="tid" class="field" value="test-person-${Math.random().toString(36).slice(2, 8)}">
     <div class="stack" style="margin-top:14px">
@@ -280,7 +280,7 @@ async function renderComments(pid) {
       <div class="row between"><span class="who">@${esc(c.author.handle)} <span class="subtle">· ${ago(c.createdAt)}</span></span>
       <span>${c.canDelete ? `<button class="button secondary small" data-act="delComment" data-id="${c.id}" data-post="${pid}">Delete</button>` : ''}
       ${!c.mine ? `<button class="button secondary small" data-act="reportComment" data-id="${c.id}" aria-label="Report comment">⚑</button>` : ''}</span></div>
-      <p>${esc(c.body)}</p>${c.status === 'held' ? '<span class="tag">Held for review — only you can see this</span>' : ''}</div></div>`).join('') : '<p class="subtle">No comments yet. Start a kind conversation.</p>';
+      <p>${esc(c.body)}</p>${c.status === 'held' ? '<span class="tag">Held for review · only you can see this</span>' : ''}</div></div>`).join('') : '<p class="subtle">No comments yet. Start a kind conversation.</p>';
   setSheetBody(`<div class="banner">Respectful discussion only. Constructive criticism is welcome; harassment, racism, threats and ridicule are not.</div>
     <div id="commentList">${list}</div>
     ${r.allowComments ? `<form data-form="comment" data-post="${pid}"><label class="formlabel" for="commentText">Add a comment</label>
@@ -314,7 +314,7 @@ export async function openReport(targetType, targetId, label = 'Report') {
 forms.report = async (f) => {
   const b = formData(f);
   const r = await api.post('/api/reports', { targetType: f.dataset.type, targetId: f.dataset.id, reason: b.reason, details: b.details, alsoBlock: b.alsoBlock });
-  closeSheet(); toast(r.blocked ? 'Reported and blocked' : 'Report submitted — thank you');
+  closeSheet(); toast(r.blocked ? 'Reported and blocked' : 'Thanks, we’ll take a look');
   if (r.blocked && $('#feed')) route();
 };
 actions.more = async (b) => {

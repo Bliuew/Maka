@@ -64,7 +64,7 @@ export default function Settings() {
       <SectionTitle>Account standing</SectionTitle>
       {data.sanctions.length ? data.sanctions.map((s: any) => (
         <Card key={s.id}>
-          <P><Text style={{ fontWeight: '800' }}>{s.level}</Text> — {s.reason}</P>
+          <P><Text style={{ fontWeight: '800' }}>{s.level}:</Text> {s.reason}</P>
           <P muted>{new Date(s.created_at).toLocaleString()}{s.revoked ? ' · overturned' : ''}</P>
           {s.revoked ? null : <Button title="Appeal" small variant="secondary" onPress={() => { setAppealText(''); setAppeal(s.id); }} />}
         </Card>

@@ -86,7 +86,7 @@ export default function Create() {
       router.push(`/p/${r.post.id}`);
     } catch (e: any) {
       toast.error(e);
-      setStatus(e?.code === 'offline' || e?.status === 0 ? 'Upload paused — it will resume from where it stopped. Tap “Resume upload” when you’re back online.' : '');
+      setStatus(e?.code === 'offline' || e?.status === 0 ? 'Upload paused. Tap Resume upload when you’re back online and it will continue where it stopped.' : '');
       if (Platform.OS !== 'web') setPendingState(getPending());
     } finally { setProgress(null); }
   };

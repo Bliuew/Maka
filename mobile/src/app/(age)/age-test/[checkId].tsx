@@ -33,7 +33,7 @@ export default function AgeSimulator() {
   }
   return (
     <Screen title="Simulated result">
-      <Banner test>AGE-VERIFICATION SIMULATOR — TEST ONLY. This page stands in for a real provider’s hosted check so the rest of Mäka can be developed and tested. It verifies nothing.</Banner>
+      <Banner test>AGE-VERIFICATION SIMULATOR (TEST ONLY). This page stands in for a real provider’s hosted check so the rest of Mäka can be developed and tested. It verifies nothing.</Banner>
       <Field label="Test identity (used to demo ban-evasion checks)" value={identity} onChangeText={setIdentity} autoCapitalize="none" />
       <Button title="Simulate: verified adult (19+)" block onPress={sim('verified')} testID="sim-verified" />
       <Button title="Simulate: under 19" variant="secondary" block onPress={sim('under_age')} />

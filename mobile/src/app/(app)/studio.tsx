@@ -31,14 +31,13 @@ export default function Studio() {
   );
 
   return (
-    <Screen title="Studio" intro="Every verified creator is eligible — no follower minimums, no tiers." onRefresh={() => reload(true)} refreshing={refreshing}>
+    <Screen title="Studio" onRefresh={() => reload(true)} refreshing={refreshing}>
       <Metrics items={[[count(s.totals.views), 'Views'], [count(s.totals.likes), 'Likes'], [count(s.totals.comments), 'Comments']]} />
       <SectionTitle>Earnings</SectionTitle>
       <Card>
-        <Text style={{ color: colors.gold, fontSize: 12, fontWeight: '800', textTransform: 'uppercase' }}>From real, compliant revenue only</Text>
         <Text style={{ color: colors.text, fontSize: 30, fontWeight: '900', marginVertical: 6 }} testID="earnings-total">{money(e.availableCents + e.pendingCents, e.currency)}</Text>
         <P>Pending {money(e.pendingCents)} · Available {money(e.availableCents)} · Paid out {money(e.paidOutCents)}</P>
-        {e.payoutsNote ? <P muted>{e.payoutsNote}</P> : null}
+        {e.payoutsEnabled ? null : <P muted>Payouts start once a payout provider is connected.</P>}
       </Card>
       {e.ledger.map((x: any) => <ListItem key={x.id} title={`${x.source} · ${x.status}`} right={<Text style={{ color: colors.text }}>{money(x.amountCents, x.currency)}</Text>} />)}
       {s.drafts.length ? <><SectionTitle>Drafts</SectionTitle>{s.drafts.map((p: any) => row(p, <Button title="Publish" small onPress={act(async () => { await api.patch('/api/posts/' + p.id, { publish: true }); toast.show('Published'); reload(); })} />))}</> : null}
@@ -104,7 +103,7 @@ export default function Studio() {
           </>
         ) : form?.kind === 'applicants' ? (
           <>
-            <P muted>Listed in the order they applied. Judge on the pitch, portfolio and track record — not follower count.</P>
+            <P muted>In the order they applied.</P>
             {form.list.length ? form.list.map((a) => (
               <Card key={a.id}>
                 <Row><Avatar user={a.creator} size={30} /><Text style={{ color: colors.text, fontWeight: '800', flex: 1 }}>@{a.creator.handle}</Text><Tag>{a.status}</Tag></Row>

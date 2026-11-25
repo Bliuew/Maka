@@ -67,7 +67,7 @@ try {
     await page.goto(base);
     await tid('approved-logo').waitFor();
     const label = await tid('approved-logo').evaluate((el) => el.getAttribute('aria-label') || el.querySelector('img')?.getAttribute('alt') || '');
-    assert.match(label, /Mäka — Feel The Power Of Love Within You/);
+    assert.match(label, /Mäka\. Feel The Power Of Love Within You/);
     assert.match(await tid('approved-logo').evaluate((el) => el.querySelector('img')?.src || ''), /approved-logo/);
     await page.getByText('Strictly 19+.').waitFor();
     await shot('welcome');
@@ -91,7 +91,7 @@ try {
     await page.getByRole('radio', { name: /Digital ID credential/ }).click();
     await shot('age-methods');
     await tid('age-start').click();
-    await page.getByText('AGE-VERIFICATION SIMULATOR — TEST ONLY.', { exact: false }).waitFor();
+    await page.getByText('AGE-VERIFICATION SIMULATOR (TEST ONLY).', { exact: false }).waitFor();
     await tid('sim-verified').click();
     await tid('feed').waitFor({ timeout: 20000 });
   });
@@ -130,14 +130,14 @@ try {
     await page.getByText('Love the warm colours in this!').waitFor();
     await tid('comment-input').fill('you are so stupid and worthless');
     await tid('comment-send').click();
-    await page.getByText('Held for review — only you can see this').waitFor();
+    await page.getByText('Held for review · only you can see this').waitFor();
     await shot('comments');
     await page.getByTestId('sheet-close').click();
   });
 
   await step('Cinema: placeholder titles cannot play', async () => {
     await tab('Cinema').click();
-    await page.getByText(/fictional placeholders/).waitFor();
+    await page.getByText(/placeholder titles/).waitFor();
     await shot('cinema');
     await tid('poster').click();
     await page.getByText(/No film has been licensed yet/).waitFor();

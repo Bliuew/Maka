@@ -424,7 +424,7 @@ export function registerSocial(r, ctx) {
         currency: 'CAD', pendingCents: total(['pending']), availableCents: total(['available']), paidOutCents: total(['paid_out']),
         ledger: ledger.map((e) => ({ id: e.id, source: e.source, amountCents: e.amount_cents, currency: e.currency, status: e.status, createdAt: e.created_at })),
         payoutsEnabled: !!config.paymentsProvider,
-        payoutsNote: config.paymentsProvider ? null : 'Payouts start once a payout provider (e.g. Stripe Connect) is connected. Earnings only come from real, compliant revenue — never from follower count.',
+        payoutsNote: config.paymentsProvider ? null : 'Payouts start once a payout provider is connected.',
       },
       eligibility: 'Every 19+ verified creator in good standing is eligible. There is no follower minimum and there are no creator tiers.',
     };

@@ -42,11 +42,11 @@ export default function Cinema() {
     </Pressable>
   );
   return (
-    <Screen title="Cinema" intro={`Free with ads · no subscription · titles licensed for ${data.territory}`} onRefresh={() => reload(true)} refreshing={refreshing}>
+    <Screen title="Cinema" intro={`Free with ads in ${data.territory}`} onRefresh={() => reload(true)} refreshing={refreshing}>
       <Pills label="Type" value={f.list ? 'watchlist' : f.kind} onChange={(v) => setF(v === 'watchlist' ? { ...f, list: f.list ? '' : 'watchlist' } : { ...f, kind: v, list: '' })}
         options={[{ value: '', label: 'All' }, { value: 'movie', label: 'Movies' }, { value: 'series', label: 'Series' }, { value: 'documentary', label: 'Documentaries' }, { value: 'watchlist', label: 'My List' }]} />
       <Pills label="Genre" value={f.genre} onChange={(v) => setF({ ...f, genre: v })} options={[{ value: '', label: 'Any genre' }, ...data.genres.map((g: string) => ({ value: g, label: g }))]} />
-      {data.licensedCount === 0 ? <Banner>No films are licensed yet. The titles below are fictional placeholders to show how Cinema works — none of them can play.</Banner> : null}
+      {data.licensedCount === 0 ? <Banner>No films are licensed yet. These are placeholder titles and can’t be played.</Banner> : null}
       {hero && !f.list ? (
         <Pressable style={s.hero} onPress={() => openTitle(hero.id)} accessibilityRole="button" accessibilityLabel={`Featured: ${hero.name}. View details`}>
           {media(hero.posterUrl) ? <Image source={{ uri: media(hero.posterUrl)! }} style={StyleSheet.absoluteFill} contentFit="cover" /> : <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}><Icon name="film-outline" size={44} color={colors.faint} /></View>}

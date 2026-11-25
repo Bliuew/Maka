@@ -45,20 +45,20 @@ export async function seed({ q, storage }, { adminPassword } = {}) {
     return uid;
   };
   const admin = await mkUser('trust.safety', 'Mäka Trust & Safety (dev)', 'Development moderator account.', null, 'admin', adminPassword || 'dev-admin-password');
-  const amara = await mkUser('amara.creates', 'Amara (sample)', 'Small joys, big moments ✨ Sample creator account.', null);
-  const olivia = await mkUser('olivia.studio', 'Olivia (sample)', 'Fashion & everyday style. Sample creator account.', null);
-  const cinema = await mkUser('maka.cinema.sample', 'Mäka Cinema (sample)', 'Fictional film promos for the Cinema demo.', null);
-  const brand = await mkUser('glow.brand.sample', 'Everyday Glow (sample brand)', 'Sample business owner account.', null);
+  const amara = await mkUser('amara.creates', 'Amara', 'Sample creator account.', null);
+  const olivia = await mkUser('olivia.studio', 'Olivia', 'Sample creator account.', null);
+  const cinema = await mkUser('maka.cinema.sample', 'Mäka Cinema', 'Sample account for the Cinema demo.', null);
+  const brand = await mkUser('glow.brand.sample', 'Everyday Glow', 'Sample business account.', null);
 
   // A few follows so counts differ — ranking and eligibility ignore them.
   await q.run('INSERT INTO follows VALUES (?,?,?)', olivia, amara, t);
   await q.run('INSERT INTO follows VALUES (?,?,?)', cinema, amara, t);
 
   const posts = [
-    [amara, ['0xF6C66F', '0xCF9845'], 'Sample post. Creating because I love it, not because of follower counts. #EveryCreator'],
-    [olivia, ['0x1D1D21', '0xCF9845'], 'Sample post. Your next creative chapter can begin today. #CreateWithMäka'],
-    [cinema, ['0x0B0B0D', '0x6B4A1F'], 'Sample post for the Cinema demo. No film is licensed yet. #MäkaCinema'],
-    [amara, ['0xFFF4DD', '0xF6C66F'], 'Sample post. Honey tones, slow mornings.'],
+    [amara, ['0xF6C66F', '0xCF9845'], 'Sample post'],
+    [olivia, ['0x1D1D21', '0xCF9845'], 'Sample post'],
+    [cinema, ['0x0B0B0D', '0x6B4A1F'], 'Sample post'],
+    [amara, ['0xFFF4DD', '0xF6C66F'], 'Sample post'],
   ];
   let i = 0;
   for (const [author, colours, caption] of posts) {
@@ -74,22 +74,22 @@ export async function seed({ q, storage }, { adminPassword } = {}) {
     await q.run('INSERT INTO businesses (id,owner_id,name,category,description,registration_ref,verification,is_sample,created_at) VALUES (?,?,?,?,?,?,?,1,?)', bid, owner, name, category, description, 'SAMPLE', 'verified', t);
     return bid;
   };
-  const glow = await mkBiz(brand, 'Everyday Glow (sample)', 'Beauty', 'Fictional skincare and wellness shop used to demonstrate the marketplace.');
-  const sound = await mkBiz(admin, 'Sound & Style (sample)', 'Fashion', 'Fictional independent fashion and accessories label.');
-  const indie = await mkBiz(admin, 'Indie Film Voices (sample)', 'Entertainment', 'Fictional independent film collective.');
-  const home = await mkBiz(admin, 'Honey & Home (sample)', 'Home & Living', 'Fictional home fragrance and everyday finds.');
+  const glow = await mkBiz(brand, 'Everyday Glow', 'Beauty', 'Sample store for trying the marketplace.');
+  const sound = await mkBiz(admin, 'Sound & Style', 'Fashion', 'Sample store for trying the marketplace.');
+  const indie = await mkBiz(admin, 'Indie Film Voices', 'Entertainment', 'Sample store for trying the marketplace.');
+  const home = await mkBiz(admin, 'Honey & Home', 'Home & Living', 'Sample store for trying the marketplace.');
   const camp = (biz, title, cat, brief, cents) => q.run(`INSERT INTO campaigns (id,business_id,title,category,brief,deliverables,compensation_cents,currency,image,is_sample,created_at)
-    VALUES (?,?,?,?,?,?,?,?,?,1,?)`, id('cp_'), biz, title, cat, brief, 'One original 30–60s vertical video, disclosed as a paid partnership.', cents, 'CAD', null, t);
-  await camp(glow, 'The Everyday Glow', 'Beauty', 'Make a 30-second original skincare storytelling video. Sample campaign — no brand is paying through this demo.', 25000);
-  await camp(sound, 'Sound & Style', 'Fashion', 'Pitch a fresh product video concept. Selection is based on fit and creativity. Sample campaign.', 30000);
-  await camp(indie, 'Indie Film Voices', 'Entertainment', 'Original reviews and cultural conversation for independent films. Sample campaign.', 20000);
+    VALUES (?,?,?,?,?,?,?,?,?,1,?)`, id('cp_'), biz, title, cat, brief, 'One 30 to 60 second vertical video, marked as a paid partnership.', cents, 'CAD', null, t);
+  await camp(glow, 'The Everyday Glow', 'Beauty', 'A 30-second skincare story, filmed vertically.', 25000);
+  await camp(sound, 'Sound & Style', 'Fashion', 'Pitch a product video concept.', 30000);
+  await camp(indie, 'Indie Film Voices', 'Entertainment', 'Short original reviews of independent films.', 20000);
   const prod = (biz, name, desc, cents, stock = 25) => q.run(`INSERT INTO products (id,business_id,name,description,price_cents,currency,image,stock,is_sample,created_at) VALUES (?,?,?,?,?,?,?,?,1,?)`,
     id('pr_'), biz, name, desc, cents, 'CAD', null, stock, t);
-  await prod(glow, 'Honey Glow Serum (sample)', 'Lightweight daily serum. Sample product.', 3400);
-  await prod(glow, 'Calm Night Balm (sample)', 'Overnight balm. Sample product.', 2800);
-  await prod(sound, 'Gold Thread Tote (sample)', 'Hand-finished tote. Sample product.', 6500);
-  await prod(home, 'Amber Room Spray (sample)', 'Warm amber scent. Sample product.', 2200, 0);
-  await prod(indie, 'Festival Pass (sample)', 'Digital festival pass. Sample product.', 1500);
+  await prod(glow, 'Honey Glow Serum', 'Lightweight daily serum.', 3400);
+  await prod(glow, 'Calm Night Balm', 'Overnight balm.', 2800);
+  await prod(sound, 'Gold Thread Tote', 'Canvas tote.', 6500);
+  await prod(home, 'Amber Room Spray', 'Room spray.', 2200, 0);
+  await prod(indie, 'Festival Pass', 'Digital festival pass.', 1500);
 
   // Cinema: clearly fictional placeholder titles — no rights, no streams.
   const film = (name, kind, genres, synopsis, lang = 'en') => q.run(`INSERT INTO titles (id,name,kind,genres,language,synopsis,poster,is_placeholder,created_at) VALUES (?,?,?,?,?,?,?,1,?)`,

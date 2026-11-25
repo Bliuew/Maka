@@ -35,7 +35,7 @@ export default function Admin() {
           </Row>
           <P muted>{r.details}</P>
           {r.evidence ? <View style={{ backgroundColor: '#000', borderRadius: 8, padding: 8 }}><Text style={{ color: colors.cream, fontFamily: 'monospace', fontSize: 12 }}>{r.evidence}</Text></View> : null}
-          <P muted>Target: {r.targetUser ? '@' + r.targetUser.handle : '—'} · prior sanctions: {r.sanctionHistory.length} · suggested: <Text style={{ fontWeight: '800', color: colors.gold }}>{r.recommendedLevel}</Text></P>
+          <P muted>Target: {r.targetUser ? '@' + r.targetUser.handle : 'none'} · prior sanctions: {r.sanctionHistory.length} · suggested: <Text style={{ fontWeight: '800', color: colors.gold }}>{r.recommendedLevel}</Text></P>
           <TextInput style={[ui.field, { marginTop: 6 }]} placeholder="Reason (shown to user)" placeholderTextColor="#77737b" accessibilityLabel="Reason, shown to the user"
             value={notes[r.id] || ''} onChangeText={(t) => setNotes({ ...notes, [r.id]: t })} />
           <Row wrap style={{ marginTop: 8 }}>

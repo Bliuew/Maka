@@ -68,7 +68,6 @@ export default function ProfileView({ userKey }: { userKey: string }) {
       </Row>
       {u.bio ? <P>{u.bio}</P> : null}
       <Metrics items={[[count(u.posts), 'Posts'], [count(u.followers), 'Followers'], [count(u.following), 'Following']]} />
-      <P muted>Follower counts are public, but never decide earnings, collaborations or who gets recommended.</P>
       <Row style={{ marginTop: 4, alignItems: 'flex-end' }}>
         {own ? (
           <>
