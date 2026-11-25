@@ -380,6 +380,10 @@ export function registerSocial(r, ctx) {
       case 'post': { const p = await getPost(b.targetId); targetUser = p.author_id; evidence = JSON.stringify({ caption: p.caption, media: p.media_id }); break; }
       case 'comment': { const c = (await q.get('SELECT * FROM comments WHERE id=?', b.targetId)) || fail(404, 'not_found'); targetUser = c.author_id; evidence = c.body; break; }
       case 'user': { const u = await findUser(b.targetId); targetUser = u.id; evidence = JSON.stringify({ handle: u.handle, name: u.display_name, bio: u.bio }); break; }
+      case 'live': {
+        const l = (await q.get('SELECT * FROM live_streams WHERE id=?', b.targetId)) || fail(404, 'not_found');
+        targetUser = l.host_id; evidence = JSON.stringify({ title: l.title, status: l.status }); break;
+      }
       case 'message': {
         const m = (await q.get('SELECT m.* FROM messages m JOIN conversation_members cm ON cm.conversation_id=m.conversation_id AND cm.user_id=? WHERE m.id=?', user.id, b.targetId)) || fail(404, 'not_found');
         targetUser = m.sender_id; evidence = m.body; break;

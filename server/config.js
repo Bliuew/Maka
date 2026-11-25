@@ -25,6 +25,8 @@ export const config = {
 
   // Payments (Stripe Connect or equivalent). Off until keys exist.
   paymentsProvider: env.PAYMENTS_PROVIDER || null,
+  // Live streaming service (livekit / mux / cloudflare). Off until an account and keys exist.
+  liveProvider: env.LIVE_PROVIDER || null,
   // Push notifications (APNs / FCM). Off until keys exist.
   pushProvider: env.PUSH_PROVIDER || null,
   // Automated media/text classifiers & malware scanning. Off until configured.

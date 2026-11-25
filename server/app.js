@@ -13,6 +13,7 @@ import { registerMessaging } from './routes/messaging.js';
 import { registerCinema } from './routes/cinema.js';
 import { registerCommerce } from './routes/commerce.js';
 import { registerAdmin } from './routes/admin.js';
+import { registerLive } from './routes/live.js';
 
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
 
@@ -159,6 +160,7 @@ export async function createApp({ databaseUrl, schema, storage } = {}) {
   registerCinema(router, ctx);
   registerCommerce(router, ctx);
   registerAdmin(router, ctx);
+  registerLive(router, ctx);
 
   router.get('/api/health', { auth: 'public' }, async () => {
     await q.get('SELECT 1');
@@ -170,6 +172,7 @@ export async function createApp({ databaseUrl, schema, storage } = {}) {
         ageVerification: config.ageProvider === 'test' ? 'TEST SIMULATOR (not real verification)' : config.ageProvider,
         payments: config.paymentsProvider || 'not configured',
         push: config.pushProvider || 'not configured',
+        live: config.liveProvider || 'not configured',
         mediaScanning: config.mediaScanner || 'not configured',
         filmLicensing: 'no licensed titles',
       },

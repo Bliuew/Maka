@@ -110,6 +110,21 @@ CREATE TABLE IF NOT EXISTS post_media (
 );
 CREATE INDEX IF NOT EXISTS post_media_media ON post_media(media_id);
 
+-- Live streams (video runs through the streaming provider; see server/live.js).
+CREATE TABLE IF NOT EXISTS live_streams (
+  id TEXT PRIMARY KEY,
+  host_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('created','live','ended','removed')),
+  provider TEXT,
+  provider_ref TEXT,
+  playback_url TEXT,
+  created_at BIGINT NOT NULL,
+  started_at BIGINT,
+  ended_at BIGINT
+);
+CREATE INDEX IF NOT EXISTS live_status ON live_streams(status, started_at);
+
 CREATE TABLE IF NOT EXISTS likes (user_id TEXT, post_id TEXT, created_at BIGINT, PRIMARY KEY (user_id, post_id));
 CREATE TABLE IF NOT EXISTS saves (user_id TEXT, post_id TEXT, created_at BIGINT, PRIMARY KEY (user_id, post_id));
 CREATE TABLE IF NOT EXISTS views (user_id TEXT, post_id TEXT, created_at BIGINT, PRIMARY KEY (user_id, post_id));
@@ -334,6 +349,10 @@ CREATE TABLE IF NOT EXISTS earnings (
   status TEXT NOT NULL CHECK (status IN ('pending','available','paid_out','reversed')),
   created_at BIGINT NOT NULL
 );
+
+-- Live streams can be reported (added after launch).
+ALTER TABLE reports DROP CONSTRAINT IF EXISTS reports_target_type_check;
+ALTER TABLE reports ADD CONSTRAINT reports_target_type_check CHECK (target_type IN ('post','comment','user','message','live'));
 `;
 
 /** Rewrite `?` placeholders (outside string literals) to `$1..$n`. */

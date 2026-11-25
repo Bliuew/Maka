@@ -452,3 +452,24 @@ test('Carousel posts: 2 to 10 ready photos, in order, never reused', async () =>
   const pending = await call('POST', '/api/uploads', a.token, { kind: 'image', size: 10 });
   assert.equal((await call('POST', '/api/posts', a.token, { kind: 'carousel', mediaIds: [await uploadImage(a), pending.data.uploadId] })).data.error, 'media_not_ready');
 });
+
+test('Live: refused honestly without a streaming provider; streams can be reported and removed', async () => {
+  resetLimits();
+  const host = await adult(), viewer = await adult(), admin = await adult();
+  await app.q.run("UPDATE users SET role='admin' WHERE id=?", admin.id);
+  const list = await call('GET', '/api/live', viewer.token);
+  assert.equal(list.data.configured, false); assert.deepEqual(list.data.streams, []);
+  const go = await call('POST', '/api/live', host.token, { title: 'Studio session' });
+  assert.equal(go.status, 503); assert.equal(go.data.error, 'live_not_configured');
+  assert.equal((await call('POST', '/api/live', host.token, { title: 'i will find you' })).data.error, 'title_not_allowed');
+  assert.equal((await call('GET', '/api/health')).data.integrations.live, 'not configured');
+  // Moderation path for a live stream (as it would exist with a provider).
+  await app.q.run("INSERT INTO live_streams (id,host_id,title,status,created_at,started_at) VALUES ('lv_test',?,'Evening chat','live',?,?)", host.id, Date.now(), Date.now());
+  assert.equal((await call('GET', '/api/live', viewer.token)).data.streams.length, 1);
+  const rep = await call('POST', '/api/reports', viewer.token, { targetType: 'live', targetId: 'lv_test', reason: 'bullying' });
+  assert.equal(rep.status, 200, JSON.stringify(rep.data));
+  await call('POST', `/api/admin/reports/${rep.data.reportId}/resolve`, admin.token, { action: 'remove_content', note: 'Harassment on stream' });
+  assert.equal((await app.q.get("SELECT status FROM live_streams WHERE id='lv_test'")).status, 'removed');
+  assert.equal((await call('GET', '/api/live', viewer.token)).data.streams.length, 0);
+  assert.equal((await call('POST', '/api/live/lv_test/end', viewer.token)).status, 403);
+});

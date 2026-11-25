@@ -12,6 +12,7 @@ export function registerAdmin(r, ctx) {
       case 'comment': return q.get('SELECT id, body, status FROM comments WHERE id=?', rep.target_id);
       case 'message': return q.get('SELECT id, body, status FROM messages WHERE id=?', rep.target_id);
       case 'user': return q.get('SELECT id, handle, display_name, status FROM users WHERE id=?', rep.target_id);
+      case 'live': return q.get('SELECT id, title, status FROM live_streams WHERE id=?', rep.target_id);
     }
     return null;
   }
@@ -38,6 +39,7 @@ export function registerAdmin(r, ctx) {
   async function removeTarget(rep) {
     const table = { post: 'posts', comment: 'comments', message: 'messages' }[rep.target_type];
     if (table) await q.run(`UPDATE ${table} SET status='removed' WHERE id=?`, rep.target_id);
+    if (rep.target_type === 'live') await ctx.removeLive(rep.target_id);
   }
 
   async function sanction(admin, userId, level, reason, reportId, days) {
