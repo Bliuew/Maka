@@ -8,7 +8,7 @@ const TAGLINE = 'Feel The Power Of Love Within You';
 
 screens.welcome = (el) => {
   el.innerHTML = `<div class="auth">
-    <div class="logo-card"><img src="/assets/approved-logo.webp" alt="Mäka — ${TAGLINE}"></div>
+    <div class="logo-card"><img src="/assets/approved-logo.webp" alt="Mäka. ${TAGLINE}"></div>
     <p class="subtle" style="text-align:center;margin:0 0 18px">A respectful community for creators, film lovers and businesses. <strong>Strictly 19+.</strong></p>
     <div class="stack"><button class="button block" data-go="signup">Create account</button><button class="button secondary block" data-go="signin">Sign in</button></div>
     <p class="subtle" style="text-align:center;margin-top:18px">You’ll confirm you are 19 or older with a privacy-first verification method before you can use Mäka.</p></div>`;
@@ -24,7 +24,7 @@ screens.signup = async (el) => {
       <label class="formlabel" for="su-handle">Handle</label><input id="su-handle" class="field" name="handle" autocomplete="username" placeholder="yourname" required>
       <label class="formlabel" for="su-name">Display name</label><input id="su-name" class="field" name="displayName" required maxlength="40">
       ${health.inviteRequired ? '<label class="formlabel" for="su-invite">Invite code</label><input id="su-invite" class="field" name="inviteCode" required autocomplete="off">' : ''}
-      <label class="check"><input type="checkbox" name="acceptTerms"> <span>I agree to the Community Guidelines (no bullying, racism, threats, doxxing or ridicule) and the Terms &amp; Privacy Policy.</span></label>
+      <label class="check"><input type="checkbox" name="acceptTerms"> <span>I agree to the <a href="/guidelines.html" target="_blank" rel="noopener">Community Guidelines</a> (no bullying, racism, threats, doxxing or ridicule) and the <a href="/terms.html" target="_blank" rel="noopener">Terms</a> &amp; <a href="/privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</span></label>
       <button class="button block" type="submit">Continue to age check</button></form></div>`;
 };
 forms.signup = async (f) => {
@@ -40,7 +40,21 @@ screens.signin = (el) => {
     <h1 style="margin:16px 0 14px">Welcome back</h1>
     <form data-form="signin"><label class="formlabel" for="si-email">Email</label><input id="si-email" class="field" name="email" type="email" autocomplete="email" required>
     <label class="formlabel" for="si-pass">Password</label><input id="si-pass" class="field" name="password" type="password" autocomplete="current-password" required>
-    <div style="margin-top:16px"><button class="button block" type="submit">Sign in</button></div></form></div>`;
+    <div style="margin-top:16px"><button class="button block" type="submit">Sign in</button></div></form>
+    <button class="button secondary block" data-go="forgot" style="margin-top:8px">Forgot password?</button></div>`;
+};
+screens.forgot = (el) => {
+  el.innerHTML = `<div class="auth"><button class="button secondary small" data-go="signin" style="align-self:flex-start">← Back</button>
+    <h1 style="margin:16px 0 8px">Reset password</h1><p class="muted">Enter the email on your account. We’ll send a link to choose a new password.</p>
+    <form data-form="forgot"><label class="formlabel" for="fp-email">Email</label><input id="fp-email" class="field" name="email" type="email" autocomplete="email" required>
+    <div style="margin-top:16px"><button class="button block" type="submit">Send reset link</button></div><p class="muted" data-sent hidden></p></form></div>`;
+};
+forms.forgot = async (f) => {
+  await busy(f.querySelector('button'), async () => {
+    await api.post('/api/auth/forgot', formData(f));
+    const p = f.querySelector('[data-sent]'); p.hidden = false;
+    p.textContent = 'If an account uses that email, a reset link is on its way. It expires in 30 minutes.';
+  });
 };
 forms.signin = async (f) => {
   await busy(f.querySelector('button'), async () => {
@@ -55,8 +69,8 @@ screens.verify = async (el) => {
   const msg = { pending: 'You started a check. You can continue it or choose another method.', failed: 'That check didn’t complete. You can try again or pick another method.',
     review: 'Your verification is under review by our team. We’ll notify you when it’s done.' }[st] || '';
   el.innerHTML = `<div class="auth">
-    <span class="eyebrow">Step 2 of 2 · Strictly 19+</span><h1 style="margin:6px 0">Confirm you’re 19 or older</h1>
-    <p class="subtle">Choose <strong>one</strong> method that works for you. We only keep the result (“over 19: yes”) — never your ID images or selfie.</p>
+    <h1 style="margin:6px 0">Confirm you’re 19 or older</h1>
+    <p class="subtle">Choose <strong>one</strong> method that works for you. We only keep the result, never your ID or selfie.</p>
     ${m.isTestMode ? '<div class="banner test"><strong>TEST MODE.</strong> No real age-verification provider is connected yet. The next step is a simulator for development and testing only. Production will not start in this mode.</div>' : ''}
     ${msg ? `<div class="banner">${esc(msg)}</div>` : ''}
     ${st === 'review' ? '' : `<form data-form="ageStart">${m.methods.map((x, i) => `<label class="method ${i === 0 ? 'sel' : ''}"><input class="sr" type="radio" name="method" value="${x.id}" ${i === 0 ? 'checked' : ''}><strong>${esc(x.label)}</strong><span>${esc(x.note)}</span></label>`).join('')}
@@ -67,11 +81,12 @@ screens.verify = async (el) => {
 forms.ageStart = async (f) => {
   const r = await api.post('/api/age/start', { method: formData(f).method });
   state.me.ageStatus = 'pending';
-  location.hash = r.redirectUrl.replace(/^\/?#/, '');
+  if (/^https:\/\//.test(r.redirectUrl)) location.href = r.redirectUrl; // the provider's hosted check
+  else location.hash = r.redirectUrl.replace(/^\/?#/, '');
 };
 
 screens['age-test'] = (el, checkId) => {
-  el.innerHTML = `<div class="auth"><div class="banner test"><strong>AGE-VERIFICATION SIMULATOR — TEST ONLY.</strong> This page stands in for a real provider’s hosted check so the rest of Mäka can be developed and tested. It verifies nothing.</div>
+  el.innerHTML = `<div class="auth"><div class="banner test"><strong>AGE-VERIFICATION SIMULATOR (TEST ONLY).</strong> This page stands in for a real provider’s hosted check so the rest of Mäka can be developed and tested. It verifies nothing.</div>
     <h1 style="margin:6px 0 12px">Simulated result</h1>
     <label class="formlabel" for="tid">Test identity (used to demo ban-evasion checks)</label><input id="tid" class="field" value="test-person-${Math.random().toString(36).slice(2, 8)}">
     <div class="stack" style="margin-top:14px">
@@ -102,7 +117,8 @@ function storyHTML(p, { withTabs = true } = {}) {
   const a = p.author;
   const media = p.kind === 'video'
     ? `<video playsinline loop ${state.muted ? 'muted' : ''} preload="metadata" poster="${attr(p.posterUrl || '')}" data-src="${attr(p.videoUrl || '')}" aria-label="Video by @${attr(a.handle)}${p.altText ? ': ' + attr(p.altText) : ''}">${p.captionsUrl ? `<track kind="captions" srclang="en" label="Captions" src="${attr(p.captionsUrl)}" default>` : ''}</video>`
-    : `<img class="still" src="${attr(p.imageUrl || p.posterUrl || '')}" alt="${attr(p.altText || 'Photo by @' + a.handle)}">`;
+    : p.kind === 'text' ? `<div class="textpost ${attr(p.textStyle || 'honey')}" role="img" aria-label="Text post by @${attr(a.handle)}"><p>${esc(p.caption)}</p></div>`
+    : `<img class="still" src="${attr(p.imageUrl || p.posterUrl || '')}" alt="${attr(p.altText || 'Photo by @' + a.handle)}">${p.kind === 'carousel' && p.images ? `<span class="carouselcount">1 / ${p.images.length}</span>` : ''}`;
   const me = state.me.id === a.id;
   return `<section class="story" data-post="${p.id}" data-author="${a.id}" aria-label="Post by @${attr(a.handle)}">
     ${media}
@@ -111,7 +127,7 @@ function storyHTML(p, { withTabs = true } = {}) {
     <div class="pausehint" aria-hidden="true">❚❚</div>
     <div class="storybody"><div class="handle"><button class="who" data-go="u/${attr(a.handle)}">${avatar(a)}<span>@${esc(a.handle)}</span></button>
       ${me ? '' : `<button class="followbtn" data-act="follow" data-user="${a.id}" aria-pressed="${a.isFollowing}">${a.isFollowing ? 'Following' : '+ Follow'}</button>`}</div>
-      <div class="caption">${esc(p.caption)}</div>
+      ${p.kind === 'text' ? '' : `<div class="caption">${esc(p.caption)}</div>`}
       ${p.isPaidPartnership ? '<div class="tagline">Paid partnership</div>' : ''}${a.isSample ? '<div class="tagline">Sample account</div>' : ''}
       ${p.status !== 'published' ? `<div class="tagline">Status: ${esc(p.status)}</div>` : ''}</div>
     <div class="actions">
@@ -280,7 +296,7 @@ async function renderComments(pid) {
       <div class="row between"><span class="who">@${esc(c.author.handle)} <span class="subtle">· ${ago(c.createdAt)}</span></span>
       <span>${c.canDelete ? `<button class="button secondary small" data-act="delComment" data-id="${c.id}" data-post="${pid}">Delete</button>` : ''}
       ${!c.mine ? `<button class="button secondary small" data-act="reportComment" data-id="${c.id}" aria-label="Report comment">⚑</button>` : ''}</span></div>
-      <p>${esc(c.body)}</p>${c.status === 'held' ? '<span class="tag">Held for review — only you can see this</span>' : ''}</div></div>`).join('') : '<p class="subtle">No comments yet. Start a kind conversation.</p>';
+      <p>${esc(c.body)}</p>${c.status === 'held' ? '<span class="tag">Held for review · only you can see this</span>' : ''}</div></div>`).join('') : '<p class="subtle">No comments yet. Start a kind conversation.</p>';
   setSheetBody(`<div class="banner">Respectful discussion only. Constructive criticism is welcome; harassment, racism, threats and ridicule are not.</div>
     <div id="commentList">${list}</div>
     ${r.allowComments ? `<form data-form="comment" data-post="${pid}"><label class="formlabel" for="commentText">Add a comment</label>
@@ -314,7 +330,7 @@ export async function openReport(targetType, targetId, label = 'Report') {
 forms.report = async (f) => {
   const b = formData(f);
   const r = await api.post('/api/reports', { targetType: f.dataset.type, targetId: f.dataset.id, reason: b.reason, details: b.details, alsoBlock: b.alsoBlock });
-  closeSheet(); toast(r.blocked ? 'Reported and blocked' : 'Report submitted — thank you');
+  closeSheet(); toast(r.blocked ? 'Reported and blocked' : 'Thanks, we’ll take a look');
   if (r.blocked && $('#feed')) route();
 };
 actions.more = async (b) => {

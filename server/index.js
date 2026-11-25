@@ -12,11 +12,13 @@ import { createApp } from './app.js';
 import { seed } from './seed.js';
 
 assertProductionSafe();
-const app = createApp();
+let app;
+try { app = await createApp(); }
+catch (e) { console.error('Mäka could not start:', e.message); process.exit(1); }
 // Listen first so hosting health checks (e.g. Replit's 5-second check) pass,
 // then load development sample data in the background.
 app.server.listen(config.port, '0.0.0.0', () => {
-  console.log(`Mäka API + app on ${config.publicOrigin} (${config.env})`);
+  console.log(`Mäka API + app on ${config.publicOrigin} (${config.env}) · Postgres · media storage: ${app.storage.name}`);
   if (config.ageProvider === 'test') console.log('⚠ Age verification is the TEST SIMULATOR. Not usable in production.');
   if (config.seedSamples && config.env !== 'production') {
     seed(app, { adminPassword: process.env.SEED_ADMIN_PASSWORD })
@@ -24,3 +26,4 @@ app.server.listen(config.port, '0.0.0.0', () => {
       .catch((e) => console.error('Sample data seeding failed:', e.message));
   }
 });
+for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { setTimeout(() => process.exit(0), 5000).unref(); app.close().finally(() => process.exit(0)); });

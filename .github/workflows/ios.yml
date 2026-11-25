@@ -1,0 +1,116 @@
+name: iOS
+
+# Apple only lets iPhones install apps from the App Store or TestFlight, and both need a
+# paid Apple Developer Program membership. So, unlike Android, there is no direct download.
+#
+# Job "simulator" (no accounts needed): compiles the iOS app on GitHub's Mac runners for the
+# iOS Simulator, proving the iPhone build works. The .app is attached to the run as an
+# artifact and opens in Xcode's Simulator on a Mac. It cannot be installed on a real iPhone.
+#
+# Job "testflight" (runs only once you add the secret EXPO_TOKEN): builds a signed iPhone app
+# with EAS and sends it to TestFlight. One-time setup on your computer first:
+#   1. Join the Apple Developer Program and create the app in App Store Connect
+#      (bundle ID io.github.bliuew.maka).
+#   2. Create a free Expo account, then in mobile/: `npx eas-cli@latest init`
+#      (adds the project ID) and `npx eas-cli@latest credentials -p ios` (lets EAS create
+#      and store the signing certificate and profile with your Apple login).
+#   3. Add your App Store Connect app ID as "ascAppId" under submit.production.ios in
+#      mobile/eas.json, and an App Store Connect API key in EAS for non-interactive submits.
+#   4. Create an Expo access token and save it as the repository secret EXPO_TOKEN.
+
+on:
+  push:
+    branches: [main, 'claude/**']
+    paths: ['mobile/**', '.github/workflows/ios.yml']
+  workflow_dispatch:
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  simulator:
+    name: Compile for iOS Simulator
+    runs-on: macos-26
+    timeout-minutes: 90
+    env:
+      EXPO_PUBLIC_API_URL: ${{ vars.MAKA_API_URL }}
+      MAKA_VERSION_CODE: ${{ github.run_number }}
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Use the newest Xcode (Expo SDK 58 targets Xcode 27)
+        run: |
+          XC=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          echo "Selecting $XC"
+          sudo xcode-select -s "$XC/Contents/Developer"
+          xcodebuild -version
+          swift --version
+      - run: npm ci
+      - name: Generate the native iOS project (Expo prebuild)
+        run: npx expo prebuild --platform ios --no-install
+      - name: Install CocoaPods
+        run: cd ios && pod install
+      - name: Build for the Simulator (unsigned)
+        run: |
+          WS=$(ls -d ios/*.xcworkspace | head -1)
+          SCHEME=$(basename "$WS" .xcworkspace)
+          echo "Workspace $WS, scheme $SCHEME"
+          status=0
+          xcodebuild -workspace "$WS" -scheme "$SCHEME" -configuration Release \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build > xcodebuild.log 2>&1 || status=$?
+          echo "::group::Errors"; grep -nE "error:|fatal error|The following build commands failed" -A4 xcodebuild.log | head -n 150 || true; echo "::endgroup::"
+          tail -n 40 xcodebuild.log
+          exit $status
+      - name: Keep the build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: mobile/xcodebuild.log
+          retention-days: 7
+      - name: Package the .app
+        run: |
+          APP=$(ls -d build/Build/Products/Release-iphonesimulator/*.app | head -1)
+          ditto -c -k --keepParent "$APP" maka-ios-simulator.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: maka-ios-simulator
+          path: mobile/maka-ios-simulator.zip
+          retention-days: 14
+
+  testflight:
+    name: Build and send to TestFlight
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - name: Skip until Apple and Expo accounts are set up
+        if: env.EXPO_TOKEN == ''
+        working-directory: .
+        run: echo "EXPO_TOKEN is not set, so no TestFlight build. See the setup steps at the top of .github/workflows/ios.yml."
+      - uses: actions/checkout@v5
+        if: env.EXPO_TOKEN != ''
+      - uses: actions/setup-node@v5
+        if: env.EXPO_TOKEN != ''
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - if: env.EXPO_TOKEN != ''
+        run: npm ci
+      - name: EAS build and submit to TestFlight
+        if: env.EXPO_TOKEN != ''
+        run: npx eas-cli@latest build --platform ios --profile production --non-interactive --auto-submit

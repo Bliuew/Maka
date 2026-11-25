@@ -1,0 +1,128 @@
+name: CI
+on:
+  push:
+  pull_request:
+
+jobs:
+  api:
+    name: API tests (Postgres + S3)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_USER: maka, POSTGRES_PASSWORD: maka, POSTGRES_DB: maka }
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U maka" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://maka:maka@localhost:5432/maka
+      S3_BUCKET: maka-ci
+      S3_ENDPOINT: http://localhost:9000
+      S3_REGION: us-east-1
+      S3_FORCE_PATH_STYLE: "1"
+      S3_ACCESS_KEY_ID: maka
+      S3_SECRET_ACCESS_KEY: maka-ci-secret
+      S3_CREATE_BUCKET: "1"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: { node-version: 22, cache: npm }
+      - name: Start S3-compatible storage (moto server)
+        run: |
+          pipx install 'moto[server]'
+          nohup moto_server -H 127.0.0.1 -p 9000 > /tmp/moto.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:9000/ >/dev/null && break; sleep 1; done
+          curl -sf http://127.0.0.1:9000/ >/dev/null
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - run: npm ci
+      - run: npm test
+
+  e2e:
+    name: End-to-end (Playwright, phone viewport)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_USER: maka, POSTGRES_PASSWORD: maka, POSTGRES_DB: maka }
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U maka" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://maka:maka@localhost:5432/maka
+      S3_BUCKET: maka-ci
+      S3_ENDPOINT: http://localhost:9000
+      S3_REGION: us-east-1
+      S3_FORCE_PATH_STYLE: "1"
+      S3_ACCESS_KEY_ID: maka
+      S3_SECRET_ACCESS_KEY: maka-ci-secret
+      S3_CREATE_BUCKET: "1"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: { node-version: 22, cache: npm }
+      - name: Start S3-compatible storage (moto server)
+        run: |
+          pipx install 'moto[server]'
+          nohup moto_server -H 127.0.0.1 -p 9000 > /tmp/moto.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:9000/ >/dev/null && break; sleep 1; done
+          curl -sf http://127.0.0.1:9000/ >/dev/null
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - run: npm ci
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots
+          path: tests/screens/
+          retention-days: 14
+
+  mobile:
+    name: Mobile app (lint, typecheck, tests, UI smoke)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_USER: maka, POSTGRES_PASSWORD: maka, POSTGRES_DB: maka }
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U maka" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://maka:maka@localhost:5432/maka
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            mobile/package-lock.json
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - run: npm ci
+      - run: npm ci
+        working-directory: mobile
+      - run: npm run lint
+        working-directory: mobile
+      - run: npm run typecheck
+        working-directory: mobile
+      - name: Unit + integration tests (against the real API)
+        run: npm test
+        working-directory: mobile
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+      - name: UI smoke test (app exported for web, real API)
+        run: npm run test:web
+        working-directory: mobile
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-screenshots
+          path: mobile/tests/screens/
+          retention-days: 14

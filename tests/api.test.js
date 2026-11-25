@@ -6,18 +6,27 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 
+// Runs against PostgreSQL (DATABASE_URL) in a throwaway schema, and against
+// S3-compatible storage when S3_BUCKET is set (local disk otherwise).
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'maka-api-'));
 process.env.MAKA_DATA_DIR = dataDir;
+process.env.DATABASE_URL ||= 'postgres://postgres@localhost:5432/maka';
+const schema = 'maka_test_' + Math.random().toString(36).slice(2, 10);
 const { createApp } = await import('../server/app.js');
 const { personRefHash } = await import('../server/age.js');
+const { toPg } = await import('../server/db.js');
 
 let app, base;
 before(async () => {
-  app = createApp({ dbFile: path.join(dataDir, 't.db') });
+  app = await createApp({ schema });
   await new Promise((r) => app.server.listen(0, r));
   base = `http://localhost:${app.server.address().port}`;
 });
-after(() => { app.close(); fs.rmSync(dataDir, { recursive: true, force: true }); });
+after(async () => {
+  await app.db.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+  await app.close();
+  fs.rmSync(dataDir, { recursive: true, force: true });
+});
 
 let ip = 0;
 async function call(method, p, token, body, headers = {}) {
@@ -72,7 +81,7 @@ test('Under-19 result closes the account and removes personal data', async () =>
   const s = await call('POST', '/api/age/start', r.data.token, { method: 'bank' });
   await call('POST', '/api/age/test/complete', r.data.token, { checkId: s.data.checkId, outcome: 'under_age' });
   assert.equal((await call('GET', '/api/me', r.data.token)).status, 401);
-  const row = app.q.get('SELECT * FROM users WHERE id=?', r.data.user.id);
+  const row = await app.q.get('SELECT * FROM users WHERE id=?', r.data.user.id);
   assert.equal(row.status, 'ineligible'); assert.ok(!row.email.includes('young'));
   assert.equal((await call('POST', '/api/auth/login', null, { email: 'young@ex.com', password: 'long-enough-pw' })).status, 401);
 });
@@ -114,8 +123,8 @@ test('For You ranking ignores follower counts', async () => {
   for (let i = 0; i < 6; i++) { resetLimits(); const f = await adult(); await call('POST', `/api/users/${famous.id}/follow`, f.token); }
   // identical engagement + age => scores must be equal regardless of followers
   const t = Date.now() - 2 * 3600e3;
-  app.q.run('UPDATE posts SET published_at=? WHERE id IN (?,?)', t, pf.id, pu.id);
-  const rank = app.ctx.rankForYou(viewer.id, 50);
+  await app.q.run('UPDATE posts SET published_at=? WHERE id IN (?,?)', t, pf.id, pu.id);
+  const rank = await app.ctx.rankForYou(viewer.id, 50);
   const ia = rank.findIndex((p) => p.id === pf.id), ib = rank.findIndex((p) => p.id === pu.id);
   assert.ok(ia >= 0 && ib >= 0);
   assert.equal(Math.abs(ia - ib), 1, 'equal-quality posts sit next to each other regardless of follower count');
@@ -176,7 +185,7 @@ test('Report → admin ban → identity blocked from re-registering → appeal b
   resetLimits();
   const victim = await adult(), abuser = await adult('abuser1', 'person-X');
   const admin1 = await adult(), admin2 = await adult();
-  app.q.run("UPDATE users SET role='admin' WHERE id IN (?,?)", admin1.id, admin2.id);
+  await app.q.run("UPDATE users SET role='admin' WHERE id IN (?,?)", admin1.id, admin2.id);
   const p = await post(abuser, 'targeted post');
   const r = await call('POST', '/api/reports', victim.token, { targetType: 'post', targetId: p.id, reason: 'bullying', alsoBlock: true });
   assert.equal(r.data.blocked, true);
@@ -186,9 +195,9 @@ test('Report → admin ban → identity blocked from re-registering → appeal b
   assert.equal(item.recommendedLevel, 'warning');
   assert.equal((await call('POST', `/api/admin/reports/${item.id}/resolve`, admin1.token, { action: 'ban' })).data.error, 'note_required');
   await call('POST', `/api/admin/reports/${item.id}/resolve`, admin1.token, { action: 'ban', note: 'Targeted harassment' });
-  assert.equal(app.q.get('SELECT status FROM posts WHERE id=?', p.id).status, 'removed');
+  assert.equal((await app.q.get('SELECT status FROM posts WHERE id=?', p.id)).status, 'removed');
   assert.equal((await call('GET', '/api/me', abuser.token)).status, 401, 'sessions revoked');
-  assert.ok(app.q.get('SELECT 1 FROM banned_identities WHERE person_ref_hash=?', personRefHash('test-person:person-X')));
+  assert.ok(await app.q.get('SELECT 1 FROM banned_identities WHERE person_ref_hash=?', personRefHash('test-person:person-X')));
   // Same verified person tries a new account from a new email/device: held for review, not admitted.
   resetLimits();
   const again = await adult('abuser2', 'person-X');
@@ -197,11 +206,11 @@ test('Report → admin ban → identity blocked from re-registering → appeal b
   // Appeal: original reviewer cannot decide it; another can overturn.
   const login = await call('POST', '/api/auth/login', null, { email: 'abuser1@ex.com', password: 'long-enough-pw' });
   assert.equal(login.data.error, 'account_banned');
-  const sid = app.q.get('SELECT id FROM sanctions WHERE user_id=?', abuser.id).id;
-  app.q.run("INSERT INTO appeals (id,user_id,sanction_id,body,created_at) VALUES ('ap1',?,?,'It was satire',?)", abuser.id, sid, Date.now());
+  const sid = (await app.q.get('SELECT id FROM sanctions WHERE user_id=?', abuser.id)).id;
+  await app.q.run("INSERT INTO appeals (id,user_id,sanction_id,body,created_at) VALUES ('ap1',?,?,'It was satire',?)", abuser.id, sid, Date.now());
   assert.equal((await call('POST', '/api/admin/appeals/ap1/decide', admin1.token, { decision: 'overturned' })).data.error, 'reviewer_conflict');
   await call('POST', '/api/admin/appeals/ap1/decide', admin2.token, { decision: 'overturned' });
-  assert.equal(app.q.get('SELECT status FROM users WHERE id=?', abuser.id).status, 'active');
+  assert.equal((await app.q.get('SELECT status FROM users WHERE id=?', abuser.id)).status, 'active');
   const audit = (await call('GET', '/api/admin/audit', admin2.token)).data.map((x) => x.action);
   assert.ok(audit.includes('report_ban') && audit.includes('appeal_overturned'));
 });
@@ -209,7 +218,7 @@ test('Report → admin ban → identity blocked from re-registering → appeal b
 test('Collabs: no follower criteria, open to a 0-follower creator, contract → pending earnings', async () => {
   resetLimits();
   const owner = await adult(), creator = await adult(), admin = await adult();
-  app.q.run("UPDATE users SET role='admin' WHERE id=?", admin.id);
+  await app.q.run("UPDATE users SET role='admin' WHERE id=?", admin.id);
   const biz = await call('POST', '/api/businesses', owner.token, { name: 'Honey Co', category: 'Food', registrationRef: 'BN123' });
   assert.equal((await call('POST', `/api/businesses/${biz.data.id}/campaigns`, owner.token, { title: 'x', brief: 'y', deliverables: 'z', compensationCents: 100 })).data.error, 'business_not_verified');
   await call('POST', `/api/admin/businesses/${biz.data.id}/verify`, admin.token, { decision: 'verified' });
@@ -231,7 +240,7 @@ test('Collabs: no follower criteria, open to a 0-follower creator, contract → 
 test('Cinema never plays placeholders; licensed titles need a rights window for the territory', async () => {
   resetLimits();
   const u = await adult(), admin = await adult();
-  app.q.run("UPDATE users SET role='admin' WHERE id=?", admin.id);
+  await app.q.run("UPDATE users SET role='admin' WHERE id=?", admin.id);
   const ph = await call('POST', '/api/admin/titles', admin.token, { name: 'Placeholder', kind: 'movie', genres: ['Drama'], isPlaceholder: true });
   assert.equal((await call('POST', `/api/cinema/${ph.data.id}/play`, u.token)).data.error, 'placeholder');
   const t = await call('POST', '/api/admin/titles', admin.token, { name: 'Licensed', kind: 'movie', genres: ['Drama'], streamUrl: 'https://cdn.example/x.m3u8' });
@@ -245,7 +254,7 @@ test('Cinema never plays placeholders; licensed titles need a rights window for 
 test('Market: server-side prices, stock checks, checkout refuses without payment provider', async () => {
   resetLimits();
   const owner = await adult(), buyer = await adult(), admin = await adult();
-  app.q.run("UPDATE users SET role='admin' WHERE id=?", admin.id);
+  await app.q.run("UPDATE users SET role='admin' WHERE id=?", admin.id);
   const biz = await call('POST', '/api/businesses', owner.token, { name: 'Shop', category: 'Home', registrationRef: 'R' });
   await call('POST', `/api/admin/businesses/${biz.data.id}/verify`, admin.token, { decision: 'verified' });
   const pr = await call('POST', `/api/businesses/${biz.data.id}/products`, owner.token, { name: 'Candle', priceCents: 1500, stock: 2 });
@@ -277,4 +286,495 @@ test('Private test server: sign-up requires the invite code when INVITE_CODE is 
     assert.equal((await call('POST', '/api/auth/register', null, { ...body, inviteCode: 'honey-2026' })).status, 200);
     assert.equal((await call('GET', '/api/health')).data.inviteRequired, true);
   } finally { app.ctx.config.inviteCode = null; }
+});
+
+test('Postgres: placeholders are rewritten outside string literals', () => {
+  assert.equal(toPg("SELECT * FROM t WHERE a=? AND b='what?' AND c=?"), "SELECT * FROM t WHERE a=$1 AND b='what?' AND c=$2");
+});
+
+test('Health reports Postgres and the media storage in use', async () => {
+  const h = await call('GET', '/api/health');
+  assert.equal(h.status, 200);
+  assert.equal(h.data.database, 'postgres');
+  assert.match(h.data.storage, process.env.S3_BUCKET ? /object storage/ : /local disk/);
+});
+
+test('Handles are unique regardless of letter case', async () => {
+  resetLimits();
+  const a = await adult('casey.case');
+  const dup = await call('POST', '/api/auth/register', null, { email: 'other-casey@ex.com', password: 'long-enough-pw', handle: 'Casey.Case', displayName: 'C', acceptTerms: true });
+  assert.equal(dup.data.error, 'handle_taken');
+  assert.equal((await call('GET', '/api/users/CASEY.CASE', a.token)).data.user.id, a.id);
+});
+
+test('Media lives in object storage: parts are cleaned up and outputs stored', async () => {
+  resetLimits();
+  const a = await adult();
+  const p = await post(a, 'storage check');
+  const m = await app.q.get('SELECT m.* FROM media m JOIN posts p ON p.media_id=m.id WHERE p.id=?', p.id);
+  const keys = await app.storage.list(`media/${m.id}`);
+  assert.ok(keys.includes(`media/${m.id}/video.mp4`) && keys.includes(`media/${m.id}/poster.jpg`), JSON.stringify(keys));
+  assert.equal((await app.storage.list(`media/${m.id}/parts`)).length, 0, 'upload parts deleted after processing');
+  const full = await fetch(base + p.posterUrl);
+  assert.equal(full.status, 200);
+  assert.equal(full.headers.get('content-type'), 'image/jpeg');
+});
+
+test('A resumable upload can continue on a second server instance', async () => {
+  resetLimits();
+  const a = await adult();
+  const other = await createApp({ schema });
+  await new Promise((r) => other.server.listen(0, r));
+  const base2 = `http://localhost:${other.server.address().port}`;
+  try {
+    const buf = fs.readFileSync(clip);
+    const u = await call('POST', '/api/uploads', a.token, { kind: 'video', size: buf.length });
+    const half = Math.floor(buf.length / 2);
+    assert.equal((await call('PUT', `/api/uploads/${u.data.uploadId}?offset=0`, a.token, new Uint8Array(buf.subarray(0, half)))).data.received, half);
+    // Instance 1 "goes away"; the client resumes against instance 2 from the server offset.
+    const h = { authorization: 'Bearer ' + a.token };
+    const st = await (await fetch(`${base2}/api/uploads/${u.data.uploadId}`, { headers: h })).json();
+    assert.equal(st.received, half);
+    const put = await fetch(`${base2}/api/uploads/${u.data.uploadId}?offset=${half}`, { method: 'PUT', headers: h, body: new Uint8Array(buf.subarray(half)) });
+    assert.equal((await put.json()).received, buf.length);
+    // A replayed (stale) chunk is refused with the current offset.
+    const stale = await fetch(`${base2}/api/uploads/${u.data.uploadId}?offset=0`, { method: 'PUT', headers: h, body: new Uint8Array(buf.subarray(0, half)) });
+    assert.equal(stale.status, 409); assert.equal((await stale.json()).received, buf.length);
+    await fetch(`${base2}/api/uploads/${u.data.uploadId}/complete`, { method: 'POST', headers: h });
+    let s; for (let i = 0; i < 100; i++) { s = await call('GET', `/api/uploads/${u.data.uploadId}`, a.token); if (s.data.status !== 'processing') break; await new Promise((r) => setTimeout(r, 150)); }
+    assert.equal(s.data.status, 'ready');
+  } finally { await other.close(); }
+});
+
+test('Production refuses to start without Postgres and object storage', () => {
+  const env = { ...process.env, NODE_ENV: 'production', MAKA_SECRET: 'x', AGE_PROVIDER: 'real', AGE_PROVIDER_API_KEY: 'k', SEED_SAMPLES: '0' };
+  delete env.DATABASE_URL; delete env.S3_BUCKET;
+  const r = spawnSync(process.execPath, ['--no-warnings=ExperimentalWarning', 'server/index.js'], { env, encoding: 'utf8', timeout: 10000 });
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /DATABASE_URL/);
+  assert.match(r.stderr, /S3_BUCKET/);
+});
+
+test('Store readiness: privacy policy, terms, guidelines and account-deletion pages are served', async () => {
+  const pages = {
+    '/privacy.html': [/strictly for adults 19\+/i, /never receive or store images of your ID/i, /Draft for legal review/],
+    '/terms.html': [/no tolerance for objectionable content/i, /at least 19/],
+    '/guidelines.html': [/Stitches, remixes or duets made to ridicule a person/, /different reviewer/],
+    '/account-deletion.html': [/Delete account/, /never stored/],
+  };
+  for (const [p, patterns] of Object.entries(pages)) {
+    const r = await fetch(base + p);
+    assert.equal(r.status, 200, p);
+    const html = await r.text();
+    for (const re of patterns) assert.match(html, re, p);
+    assert.ok(html.includes('Mäka'), p);
+    // Policy text may say there are *no* public dislike counts; it must never describe one.
+    assert.ok(!/dislike/i.test(html.replace(/no public dislike counts/gi, '')), p);
+  }
+});
+
+test('Only brand assets ship in web/assets (no sample photos or third-party imagery)', () => {
+  const allowed = new Set(['approved-logo.webp', 'app-icon-design.webp', 'icon-1024.png', 'icon-512.png', 'icon-192.png',
+    'icon-maskable-512.png', 'apple-touch-icon.png', 'favicon-64.png']);
+  const files = fs.readdirSync(new URL('../web/assets', import.meta.url));
+  assert.deepEqual(files.filter((f) => !allowed.has(f)), []);
+  assert.ok(!/asset:/.test(fs.readFileSync(new URL('../server/seed.js', import.meta.url), 'utf8')), 'seed data references no image assets');
+});
+
+test('Discover: emerging creators are never chosen by follower count; hashtags are counted from real posts', async () => {
+  resetLimits();
+  const viewer = await adult(), quiet = await adult(), popular = await adult();
+  await post(quiet, 'first light #honeyhour'); await post(popular, 'morning #honeyhour #studio');
+  for (let i = 0; i < 3; i++) { resetLimits(); const f = await adult(); await call('POST', `/api/users/${popular.id}/follow`, f.token); }
+  const d = (await call('GET', '/api/discover', viewer.token)).data;
+  const ids = d.creators.map((u) => u.id);
+  assert.ok(ids.includes(quiet.id) && ids.includes(popular.id));
+  assert.ok(ids.indexOf(popular.id) < ids.indexOf(quiet.id), 'newest first (popular joined later), not by followers');
+  assert.equal(d.hashtags.find((h) => h.tag === '#honeyhour').posts, 2);
+  const src = fs.readFileSync(new URL('../server/routes/social.js', import.meta.url), 'utf8');
+  const fn = src.slice(src.indexOf("r.get('/api/discover'"), src.indexOf('// ---------------- creator studio'));
+  assert.ok(!/follows/.test(fn), 'discover never reads the follows table');
+});
+
+test('Market product feed lists products from verified stores only', async () => {
+  resetLimits();
+  const owner = await adult(), buyer = await adult(), admin = await adult();
+  await app.q.run("UPDATE users SET role='admin' WHERE id=?", admin.id);
+  const ok = await call('POST', '/api/businesses', owner.token, { name: 'Feed Shop', category: 'Lifestyle', registrationRef: 'R1' });
+  const pending = await call('POST', '/api/businesses', owner.token, { name: 'Pending Shop', category: 'Lifestyle', registrationRef: 'R2' });
+  await call('POST', `/api/admin/businesses/${ok.data.id}/verify`, admin.token, { decision: 'verified' });
+  await call('POST', `/api/businesses/${ok.data.id}/products`, owner.token, { name: 'Linen Throw', priceCents: 4000, stock: 3 });
+  const feed = (await call('GET', '/api/market/products?category=Lifestyle', buyer.token)).data;
+  assert.ok(feed.items.some((p) => p.name === 'Linen Throw' && p.business === 'Feed Shop'));
+  assert.ok(!feed.items.some((p) => p.business === 'Pending Shop'));
+  void pending;
+});
+
+const pic = path.join(dataDir, 'p.png');
+execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=320x400', '-frames:v', '1', pic]);
+async function uploadImage(user) {
+  const buf = fs.readFileSync(pic);
+  const u = await call('POST', '/api/uploads', user.token, { kind: 'image', size: buf.length });
+  await call('PUT', `/api/uploads/${u.data.uploadId}?offset=0`, user.token, new Uint8Array(buf));
+  await call('POST', `/api/uploads/${u.data.uploadId}/complete`, user.token);
+  for (let i = 0; i < 100; i++) { const s = await call('GET', `/api/uploads/${u.data.uploadId}`, user.token); if (s.data.status !== 'processing') break; await new Promise((r) => setTimeout(r, 120)); }
+  return u.data.uploadId;
+}
+
+test('Text posts: published with a style, screened like captions, no media', async () => {
+  resetLimits();
+  const a = await adult();
+  const t = await call('POST', '/api/posts', a.token, { kind: 'text', caption: 'Honey thought for the day #hive', textStyle: 'midnight' });
+  assert.equal(t.status, 200, JSON.stringify(t.data));
+  assert.equal(t.data.post.kind, 'text'); assert.equal(t.data.post.textStyle, 'midnight'); assert.equal(t.data.post.status, 'published');
+  assert.equal(t.data.post.videoUrl, null); assert.equal(t.data.post.imageUrl, null);
+  assert.equal((await call('POST', '/api/posts', a.token, { kind: 'text', caption: '   ' })).data.error, 'text_required');
+  const abusive = await call('POST', '/api/posts', a.token, { kind: 'text', caption: 'you are so worthless' });
+  assert.equal(abusive.data.post.status, 'held', 'abusive text posts are held for review');
+  const feed = await call('GET', '/api/feed', (await adult()).token);
+  assert.ok(feed.data.items.some((p) => p.id === t.data.post.id));
+});
+
+test('Carousel posts: 2 to 10 ready photos, in order, never reused', async () => {
+  resetLimits();
+  const a = await adult();
+  const ids = [await uploadImage(a), await uploadImage(a), await uploadImage(a)];
+  assert.equal((await call('POST', '/api/posts', a.token, { kind: 'carousel', mediaIds: ids.slice(0, 1) })).data.error, 'carousel_size');
+  const c = await call('POST', '/api/posts', a.token, { kind: 'carousel', mediaIds: ids, caption: 'Three looks' });
+  assert.equal(c.status, 200, JSON.stringify(c.data));
+  assert.equal(c.data.post.kind, 'carousel'); assert.equal(c.data.post.images.length, 3);
+  assert.equal(c.data.post.imageUrl, c.data.post.images[0].url);
+  assert.equal((await fetch(base + c.data.post.images[2].url)).status, 200);
+  assert.equal((await call('POST', '/api/posts', a.token, { kind: 'carousel', mediaIds: ids.slice(1) })).data.error, 'media_already_used');
+  const other = await adult();
+  const notMine = await call('POST', '/api/posts', other.token, { kind: 'carousel', mediaIds: [await uploadImage(other), ids[0]] });
+  assert.equal(notMine.data.error, 'media_required');
+  const pending = await call('POST', '/api/uploads', a.token, { kind: 'image', size: 10 });
+  assert.equal((await call('POST', '/api/posts', a.token, { kind: 'carousel', mediaIds: [await uploadImage(a), pending.data.uploadId] })).data.error, 'media_not_ready');
+});
+
+test('Live: refused honestly without a streaming provider; streams can be reported and removed', async () => {
+  resetLimits();
+  const host = await adult(), viewer = await adult(), admin = await adult();
+  await app.q.run("UPDATE users SET role='admin' WHERE id=?", admin.id);
+  const list = await call('GET', '/api/live', viewer.token);
+  assert.equal(list.data.configured, false); assert.deepEqual(list.data.streams, []);
+  const go = await call('POST', '/api/live', host.token, { title: 'Studio session' });
+  assert.equal(go.status, 503); assert.equal(go.data.error, 'live_not_configured');
+  assert.equal((await call('POST', '/api/live', host.token, { title: 'i will find you' })).data.error, 'title_not_allowed');
+  assert.equal((await call('GET', '/api/health')).data.integrations.live, 'not configured');
+  // Moderation path for a live stream (as it would exist with a provider).
+  await app.q.run("INSERT INTO live_streams (id,host_id,title,status,created_at,started_at) VALUES ('lv_test',?,'Evening chat','live',?,?)", host.id, Date.now(), Date.now());
+  assert.equal((await call('GET', '/api/live', viewer.token)).data.streams.length, 1);
+  const rep = await call('POST', '/api/reports', viewer.token, { targetType: 'live', targetId: 'lv_test', reason: 'bullying' });
+  assert.equal(rep.status, 200, JSON.stringify(rep.data));
+  await call('POST', `/api/admin/reports/${rep.data.reportId}/resolve`, admin.token, { action: 'remove_content', note: 'Harassment on stream' });
+  assert.equal((await app.q.get("SELECT status FROM live_streams WHERE id='lv_test'")).status, 'removed');
+  assert.equal((await call('GET', '/api/live', viewer.token)).data.streams.length, 0);
+  assert.equal((await call('POST', '/api/live/lv_test/end', viewer.token)).status, 403);
+});
+
+test('password reset: no account enumeration, single-use expiring token, signs out everywhere', async () => {
+  resetLimits();
+  const u = await adult('resetme');
+  const outbox = app.ctx.mail.outbox;
+  outbox.length = 0;
+  const unknown = await call('POST', '/api/auth/forgot', null, { email: 'nobody-here@ex.com' });
+  assert.equal(unknown.status, 200);
+  assert.equal(outbox.length, 0);
+  const known = await call('POST', '/api/auth/forgot', null, { email: 'resetme@ex.com' });
+  assert.deepEqual(known.data, unknown.data, 'same response whether or not the account exists');
+  assert.equal(outbox.length, 1);
+  const token = new URL(outbox[0].text.match(/https?:\/\/\S+/)[0]).searchParams.get('token');
+  const row = await app.db.query(`SELECT token_hash FROM ${schema}.password_resets`);
+  assert.ok(!row.rows.some((r) => r.token_hash === token), 'only a hash of the token is stored');
+  assert.equal((await call('POST', '/api/auth/reset', null, { token, password: 'short' })).status, 400);
+  assert.equal((await call('POST', '/api/auth/reset', null, { token, password: 'a-brand-new-password' })).status, 200);
+  assert.equal((await call('GET', '/api/me', u.token)).status, 401, 'old sessions are signed out');
+  assert.equal((await call('POST', '/api/auth/reset', null, { token, password: 'another-new-password' })).data.error, 'reset_invalid', 'token is single-use');
+  assert.equal((await call('POST', '/api/auth/login', null, { email: 'resetme@ex.com', password: 'long-enough-pw' })).status, 401);
+  assert.equal((await call('POST', '/api/auth/login', null, { email: 'resetme@ex.com', password: 'a-brand-new-password' })).status, 200);
+  await call('POST', '/api/auth/forgot', null, { email: 'resetme@ex.com' });
+  const t2 = new URL(outbox.at(-1).text.match(/https?:\/\/\S+/)[0]).searchParams.get('token');
+  await app.db.query(`UPDATE ${schema}.password_resets SET expires_at=0`);
+  assert.equal((await call('POST', '/api/auth/reset', null, { token: t2, password: 'expired-link-password' })).data.error, 'reset_invalid', 'expired tokens are refused');
+});
+
+test('mail adapters call the provider API with the key', async () => {
+  const { createMailer } = await import('../server/mail.js');
+  const http = await import('node:http');
+  const seen = [];
+  const fake = http.createServer((req, res) => { let b = ''; req.on('data', (d) => { b += d; }); req.on('end', () => { seen.push({ url: req.url, headers: req.headers, body: JSON.parse(b) }); res.end('{}'); }); });
+  await new Promise((r) => fake.listen(0, r));
+  const apiBase = `http://localhost:${fake.address().port}`;
+  const msg = { to: 'a@ex.com', subject: 'S', text: 'T', html: '<p>T</p>' };
+  await createMailer({ MAIL_PROVIDER: 'resend', MAIL_API_KEY: 'rk', MAIL_API_BASE: apiBase, MAIL_FROM: 'M <n@x.test>' }).send(msg);
+  await createMailer({ MAIL_PROVIDER: 'postmark', MAIL_API_KEY: 'pk', MAIL_API_BASE: apiBase, MAIL_FROM: 'M <n@x.test>' }).send(msg);
+  fake.close();
+  assert.equal(seen[0].url, '/emails'); assert.equal(seen[0].headers.authorization, 'Bearer rk'); assert.deepEqual(seen[0].body.to, ['a@ex.com']);
+  assert.equal(seen[1].url, '/email'); assert.equal(seen[1].headers['x-postmark-server-token'], 'pk'); assert.equal(seen[1].body.To, 'a@ex.com');
+  await assert.rejects(createMailer({ NODE_ENV: 'production' }).send(msg), /not configured/);
+});
+
+test('Stripe: business onboarding, hosted checkout, signed webhooks mark orders paid, refunds a cancelled order', async () => {
+  resetLimits();
+  const crypto = await import('node:crypto');
+  const http = await import('node:http');
+  const { createPayments } = await import('../server/payments.js');
+  const calls = [];
+  const fake = http.createServer((req, res) => {
+    let b = ''; req.on('data', (d) => { b += d; });
+    req.on('end', () => {
+      const p = new URLSearchParams(b);
+      calls.push({ method: req.method, url: req.url, auth: req.headers.authorization, idem: req.headers['idempotency-key'], p });
+      const reply = (o) => { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(o)); };
+      if (req.url === '/v1/accounts') return reply({ id: 'acct_test1' });
+      if (req.url === '/v1/account_links') return reply({ url: 'https://connect.stripe.test/onboard' });
+      if (req.url === '/v1/accounts/acct_test1') return reply({ id: 'acct_test1', charges_enabled: false });
+      if (req.url === '/v1/checkout/sessions') return reply({ id: 'cs_' + calls.length, url: 'https://checkout.stripe.test/' + calls.length });
+      if (req.url.endsWith('/expire')) return reply({});
+      if (req.url === '/v1/refunds') return reply({ id: 're_1' });
+      res.statusCode = 404; reply({ error: { message: 'unknown' } });
+    });
+  });
+  await new Promise((r) => fake.listen(0, r));
+  const saved = app.ctx.payments;
+  app.ctx.payments = createPayments({ PAYMENTS_PROVIDER: 'stripe', STRIPE_SECRET_KEY: 'sk_test_x', STRIPE_WEBHOOK_SECRET: 'whsec_x', STRIPE_API_BASE: `http://localhost:${fake.address().port}`, PLATFORM_FEE_BPS: '500' });
+  const hook = async (event, { secret = 'whsec_x', age = 0 } = {}) => {
+    const raw = JSON.stringify(event), t = Math.floor(Date.now() / 1000) - age;
+    const sig = crypto.createHmac('sha256', secret).update(`${t}.${raw}`).digest('hex');
+    const res = await fetch(base + '/api/payments/webhook', { method: 'POST', headers: { 'content-type': 'application/json', 'stripe-signature': `t=${t},v1=${sig}` }, body: raw });
+    return { status: res.status, data: await res.json() };
+  };
+  try {
+    const owner = await adult(), buyer = await adult(), admin = await adult();
+    await app.q.run("UPDATE users SET role='admin' WHERE id=?", admin.id);
+    const biz = (await call('POST', '/api/businesses', owner.token, { name: 'Hive Goods', category: 'Home', registrationRef: 'R9' })).data;
+    assert.equal((await call('POST', `/api/businesses/${biz.id}/payments/onboard`, owner.token)).data.error, 'business_not_verified');
+    await call('POST', `/api/admin/businesses/${biz.id}/verify`, admin.token, { decision: 'verified' });
+    assert.equal((await call('POST', `/api/businesses/${biz.id}/payments/onboard`, buyer.token)).status, 404, 'only the owner can connect payouts');
+    const ob = await call('POST', `/api/businesses/${biz.id}/payments/onboard`, owner.token);
+    assert.equal(ob.data.url, 'https://connect.stripe.test/onboard');
+    assert.equal(calls[0].auth, 'Bearer sk_test_x');
+    const pr = (await call('POST', `/api/businesses/${biz.id}/products`, owner.token, { name: 'Beeswax candle', priceCents: 2000, stock: 5 })).data;
+    const order = (await call('POST', '/api/orders', buyer.token, { businessId: biz.id, items: [{ productId: pr.id, qty: 2 }] })).data;
+    assert.equal((await call('POST', `/api/orders/${order.orderId}/checkout`, buyer.token)).data.error, 'store_not_accepting_payments', 'no checkout until the store finished onboarding');
+    // Forged, stale and valid account.updated events
+    const acctEv = { id: 'evt_a1', type: 'account.updated', data: { object: { id: 'acct_test1', charges_enabled: true } } };
+    assert.equal((await hook(acctEv, { secret: 'wrong' })).status, 400, 'forged signature refused');
+    assert.equal((await hook(acctEv, { age: 3600 })).status, 400, 'stale signature refused');
+    assert.equal((await hook(acctEv)).status, 200);
+    assert.equal((await call('GET', `/api/businesses/${biz.id}/payments`, owner.token)).data.acceptingPayments, true);
+    const co = await call('POST', `/api/orders/${order.orderId}/checkout`, buyer.token);
+    assert.match(co.data.url, /^https:\/\/checkout\.stripe\.test\//);
+    const cs = calls.find((c) => c.url === '/v1/checkout/sessions').p;
+    assert.equal(cs.get('line_items[0][price_data][unit_amount]'), '2000', 'server prices sent to Stripe');
+    assert.equal(cs.get('line_items[0][quantity]'), '2');
+    assert.equal(cs.get('payment_intent_data[transfer_data][destination]'), 'acct_test1', 'money goes to the business');
+    assert.equal(cs.get('payment_intent_data[application_fee_amount]'), '200', '5% platform fee from PLATFORM_FEE_BPS');
+    assert.ok(!cs.has('card') && !cs.toString().includes('card_number'));
+    assert.equal((await call('POST', `/api/orders/${order.orderId}/checkout`, buyer.token)).data.url, co.data.url, 'reuses the open checkout page');
+    const paid = { id: 'evt_p1', type: 'checkout.session.completed', data: { object: { payment_status: 'paid', payment_intent: 'pi_1', amount_subtotal: 4000, metadata: { order_id: order.orderId } } } };
+    assert.equal((await hook(paid)).status, 200);
+    assert.equal((await hook(paid)).data.duplicate, true, 'replayed event ignored');
+    const mine = (await call('GET', '/api/me/orders', buyer.token)).data.find((x) => x.id === order.orderId);
+    assert.equal(mine.status, 'paid');
+    assert.equal((await app.q.get('SELECT stock FROM products WHERE id=?', pr.id)).stock, 3, 'stock decremented once');
+    await hook({ id: 'evt_r1', type: 'charge.refunded', data: { object: { refunded: true, payment_intent: 'pi_1' } } });
+    assert.equal((await call('GET', '/api/me/orders', buyer.token)).data.find((x) => x.id === order.orderId).status, 'refunded');
+    // Cancel with an open payment page: page is expired; a late payment is refunded automatically.
+    const o2 = (await call('POST', '/api/orders', buyer.token, { businessId: biz.id, items: [{ productId: pr.id, qty: 1 }] })).data;
+    await call('POST', `/api/orders/${o2.orderId}/checkout`, buyer.token);
+    await call('POST', `/api/orders/${o2.orderId}/cancel`, buyer.token);
+    assert.ok(calls.some((c) => c.url.endsWith('/expire')), 'open checkout page closed on cancel');
+    await hook({ id: 'evt_p2', type: 'checkout.session.completed', data: { object: { payment_status: 'paid', payment_intent: 'pi_2', amount_subtotal: 2000, metadata: { order_id: o2.orderId } } } });
+    const rf = calls.find((c) => c.url === '/v1/refunds');
+    assert.equal(rf.p.get('payment_intent'), 'pi_2'); assert.equal(rf.p.get('reverse_transfer'), 'true');
+    assert.equal((await call('GET', '/api/me/orders', buyer.token)).data.find((x) => x.id === o2.orderId).status, 'cancelled');
+  } finally {
+    app.ctx.payments = saved;
+    fake.close();
+  }
+});
+
+test('Live with Mux: host gets an ingest key, goes live when the encoder connects, ends cleanly', async () => {
+  resetLimits();
+  const crypto = await import('node:crypto');
+  const http = await import('node:http');
+  const { createMux, setLiveProvider } = await import('../server/live.js');
+  const calls = []; let status = 'idle';
+  const fake = http.createServer((req, res) => {
+    let b = ''; req.on('data', (d) => { b += d; });
+    req.on('end', () => {
+      calls.push({ method: req.method, url: req.url, auth: req.headers.authorization, body: b ? JSON.parse(b) : null });
+      res.setHeader('content-type', 'application/json');
+      if (req.method === 'POST' && req.url === '/video/v1/live-streams') return res.end(JSON.stringify({ data: { id: 'mux_ls1', stream_key: 'sk-secret', playback_ids: [{ id: 'pb1' }] } }));
+      if (req.method === 'GET') return res.end(JSON.stringify({ data: { id: 'mux_ls1', status } }));
+      res.end(JSON.stringify({ data: {} }));
+    });
+  });
+  await new Promise((r) => fake.listen(0, r));
+  setLiveProvider(createMux({ MUX_TOKEN_ID: 'tid', MUX_TOKEN_SECRET: 'tsec', MUX_WEBHOOK_SECRET: 'mwh', MUX_API_BASE: `http://localhost:${fake.address().port}` }));
+  const hook = async (event, secret = 'mwh') => {
+    const raw = JSON.stringify(event), t = Math.floor(Date.now() / 1000);
+    const res = await fetch(base + '/api/live/webhook', { method: 'POST', headers: { 'content-type': 'application/json', 'mux-signature': `t=${t},v1=${crypto.createHmac('sha256', secret).update(`${t}.${raw}`).digest('hex')}` }, body: raw });
+    return res.status;
+  };
+  try {
+    const host = await adult(), viewer = await adult(), blocked = await adult();
+    await call('POST', `/api/users/${blocked.id}/block`, host.token);
+    const go = await call('POST', '/api/live', host.token, { title: 'Morning studio' });
+    assert.equal(go.status, 200, JSON.stringify(go.data));
+    assert.equal(go.data.streamKey, 'sk-secret'); assert.match(go.data.ingestUrl, /^rtmps:\/\//);
+    assert.equal(calls[0].auth, 'Basic ' + Buffer.from('tid:tsec').toString('base64'));
+    const row = await app.q.get('SELECT * FROM live_streams WHERE id=?', go.data.id);
+    assert.ok(!JSON.stringify(row).includes('sk-secret'), 'stream key is never stored');
+    assert.equal((await call('GET', '/api/live', viewer.token)).data.streams.length, 0, 'not listed until the broadcast starts');
+    assert.equal((await call('GET', `/api/live/${go.data.id}`, viewer.token)).status, 404);
+    assert.equal((await call('GET', `/api/live/${go.data.id}`, host.token)).data.status, 'created', 'host sees waiting state');
+    status = 'active';
+    const now = await call('GET', `/api/live/${go.data.id}`, host.token);
+    assert.equal(now.data.status, 'live', 'goes live once the encoder connects');
+    const seen = (await call('GET', '/api/live', viewer.token)).data.streams;
+    assert.equal(seen.length, 1); assert.equal(seen[0].playbackUrl, 'https://stream.mux.com/pb1.m3u8');
+    assert.equal((await call('GET', '/api/live', blocked.token)).data.streams.length, 0, 'blocked users cannot see the live');
+    assert.equal((await call('GET', `/api/live/${go.data.id}`, blocked.token)).status, 404);
+    assert.equal(await hook({ type: 'video.live_stream.idle', data: { id: 'mux_ls1' } }, 'forged'), 400, 'forged webhook refused');
+    assert.equal(await hook({ type: 'video.live_stream.idle', data: { id: 'mux_ls1' } }), 200);
+    assert.equal((await app.q.get('SELECT status FROM live_streams WHERE id=?', go.data.id)).status, 'ended', 'ends when the broadcast stops');
+    assert.ok(calls.some((c) => c.url === '/video/v1/live-streams/mux_ls1/disable'), 'stream key disabled at the provider');
+    assert.equal((await call('GET', '/api/live', viewer.token)).data.streams.length, 0);
+  } finally {
+    setLiveProvider(null);
+    fake.close();
+  }
+});
+
+test('Veriff age check: signed decisions only, strict 19+ from date of birth, birth date never stored, human review', async () => {
+  resetLimits();
+  const crypto = await import('node:crypto');
+  const http = await import('node:http');
+  const { createVeriff, setAgeProvider, ageOn } = await import('../server/age.js');
+  assert.equal(ageOn('2000-11-25', new Date('2019-11-25T00:00:00Z')), 19, 'turns 19 on the birthday');
+  assert.equal(ageOn('2000-11-26', new Date('2019-11-25T00:00:00Z')), 18, 'one day short is 18');
+  let n = 0; const sessions = [];
+  const fake = http.createServer((req, res) => {
+    let b = ''; req.on('data', (d) => { b += d; });
+    req.on('end', () => {
+      sessions.push({ headers: req.headers, body: JSON.parse(b) });
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ status: 'success', verification: { id: 'vf_' + ++n, url: 'https://magic.veriff.test/v/' + n } }));
+    });
+  });
+  await new Promise((r) => fake.listen(0, r));
+  const mod = await adult('vfmod');
+  await app.q.run("UPDATE users SET role='admin' WHERE id=?", mod.id);
+  setAgeProvider(createVeriff({ AGE_PROVIDER_API_KEY: 'vk', AGE_PROVIDER_SECRET: 'vsecret', AGE_PROVIDER_API_BASE: `http://localhost:${fake.address().port}` }, 19));
+  const decide = async (checkId, sessionId, verification, secret = 'vsecret') => {
+    const raw = JSON.stringify({ status: 'success', verification: { id: sessionId, vendorData: checkId, ...verification } });
+    const res = await fetch(base + '/api/age/webhook', { method: 'POST', headers: { 'content-type': 'application/json', 'x-hmac-signature': crypto.createHmac('sha256', secret).update(raw).digest('hex') }, body: raw });
+    return { status: res.status, data: await res.json() };
+  };
+  const yearsAgo = (y, extraDays = 0) => { const d = new Date(); d.setUTCFullYear(d.getUTCFullYear() - y); d.setUTCDate(d.getUTCDate() + extraDays); return d.toISOString().slice(0, 10); };
+  const signup = async (h) => (await call('POST', '/api/auth/register', null, { email: `${h}@ex.com`, password: 'long-enough-pw', handle: h, displayName: h, acceptTerms: true })).data;
+  try {
+    const methods = (await call('GET', '/api/age/methods')).data;
+    assert.equal(methods.isTestMode, false);
+    assert.deepEqual(methods.methods.map((m) => m.id), ['government_id', 'id_selfie'], 'only methods the provider supports');
+    assert.equal((await call('POST', '/api/age/test/complete', null, {})).status, 401);
+    // Adult
+    const a = await signup('vfadult');
+    assert.equal((await call('POST', '/api/age/start', a.token, { method: 'bank' })).data.error, 'invalid_method');
+    const s = (await call('POST', '/api/age/start', a.token, { method: 'government_id' })).data;
+    assert.equal(s.redirectUrl, 'https://magic.veriff.test/v/1');
+    assert.equal(sessions[0].headers['x-auth-client'], 'vk');
+    assert.equal(sessions[0].body.verification.vendorData, s.checkId);
+    assert.equal((await call('POST', '/api/age/test/complete', a.token, { checkId: s.checkId, outcome: 'verified' })).status, 404, 'simulator is gone with a real provider');
+    const adultDecision = { status: 'approved', person: { dateOfBirth: yearsAgo(19), firstName: 'A' }, document: { number: 'P123', country: 'CA', type: 'PASSPORT' } };
+    assert.equal((await decide(s.checkId, 'vf_1', adultDecision, 'forged')).status, 401, 'forged decision refused');
+    assert.equal((await decide(s.checkId, 'vf_other', adultDecision)).status, 400, 'decision for another session refused');
+    assert.equal((await decide(s.checkId, 'vf_1', adultDecision)).status, 200);
+    assert.equal((await call('GET', '/api/me', a.token)).data.ageStatus, 'verified');
+    const stored = JSON.stringify(await app.q.all('SELECT * FROM age_checks WHERE user_id=?', a.user.id));
+    assert.ok(!stored.includes(yearsAgo(19)) && !stored.includes('P123'), 'birth date and document number are not stored');
+    // One day short of 19
+    const k = await signup('vfyoung');
+    const s2 = (await call('POST', '/api/age/start', k.token, { method: 'id_selfie' })).data;
+    await decide(s2.checkId, 'vf_2', { status: 'approved', person: { dateOfBirth: yearsAgo(19, 1) }, document: { number: 'P999', country: 'CA', type: 'PASSPORT' } });
+    assert.equal((await call('GET', '/api/me', k.token)).status, 401, 'under-19 account closed and signed out');
+    assert.equal((await app.q.get('SELECT status FROM users WHERE id=?', k.user.id)).status, 'ineligible');
+    // Approved without a birth date -> human review
+    const r = await signup('vfreview');
+    const s3 = (await call('POST', '/api/age/start', r.token, { method: 'government_id' })).data;
+    await decide(s3.checkId, 'vf_3', { status: 'approved', person: {}, document: { number: 'D1', country: 'CA', type: 'DRIVERS_LICENSE' } });
+    assert.equal((await call('GET', '/api/me', r.token)).data.ageStatus, 'review');
+    const queue = (await call('GET', '/api/admin/age-reviews', mod.token)).data;
+    const item = queue.find((x) => x.userId === r.user.id);
+    assert.equal(item.providerRef, 'vf_3', 'reviewer can find the session in the provider dashboard');
+    assert.match(item.reason, /could not confirm the date of birth/);
+    assert.equal((await call('POST', `/api/admin/age-reviews/${r.user.id}/decide`, mod.token, { decision: 'verified' })).data.error, 'note_required');
+    assert.equal((await call('POST', `/api/admin/age-reviews/${r.user.id}/decide`, r.token, { decision: 'verified', note: 'x' })).status, 403);
+    assert.equal((await call('POST', `/api/admin/age-reviews/${r.user.id}/decide`, mod.token, { decision: 'verified', note: 'DOB confirmed in provider dashboard' })).status, 200);
+    assert.equal((await call('GET', '/api/me', r.token)).data.ageStatus, 'verified');
+    assert.ok((await call('GET', '/api/admin/audit', mod.token)).data.some((x) => x.action === 'age_review_verified'));
+    // Declined -> can try again
+    const d = await signup('vfdeclined');
+    const s4 = (await call('POST', '/api/age/start', d.token, { method: 'government_id' })).data;
+    await decide(s4.checkId, 'vf_4', { status: 'declined' });
+    assert.equal((await call('GET', '/api/me', d.token)).data.ageStatus, 'failed');
+    assert.equal((await call('POST', '/api/age/start', d.token, { method: 'government_id' })).status, 200, 'can retry after a decline');
+  } finally {
+    setAgeProvider(null);
+    fake.close();
+  }
+});
+
+test('Push: notifications reach the phone, message text never does, mutes and dead tokens respected', async () => {
+  resetLimits();
+  const http = await import('node:http');
+  const { createPush } = await import('../server/push.js');
+  const sent = [];
+  const fake = http.createServer((req, res) => {
+    let b = ''; req.on('data', (d) => { b += d; });
+    req.on('end', () => {
+      const msgs = JSON.parse(b); sent.push(...msgs);
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ data: msgs.map((m) => m.to === 'ExponentPushToken[dead]' ? { status: 'error', details: { error: 'DeviceNotRegistered' } } : { status: 'ok', id: 't' }) }));
+    });
+  });
+  await new Promise((r) => fake.listen(0, r));
+  const saved = app.ctx.push;
+  app.ctx.push = createPush({ PUSH_PROVIDER: 'expo', EXPO_PUSH_URL: `http://localhost:${fake.address().port}` }, { onInvalidToken: (t) => app.q.run('DELETE FROM push_tokens WHERE token=?', t) });
+  const settle = () => new Promise((r) => setTimeout(r, 150));
+  try {
+    const a = await adult(), b = await adult(), c = await adult();
+    assert.equal((await call('POST', '/api/me/push-tokens', a.token, { token: 'not-a-token' })).status, 400);
+    assert.equal((await call('POST', '/api/me/push-tokens', a.token, { token: 'ExponentPushToken[aaa]', platform: 'android' })).data.enabled, true);
+    await call('POST', '/api/me/push-tokens', a.token, { token: 'ExponentPushToken[dead]', platform: 'ios' });
+    await call('POST', `/api/users/${a.id}/follow`, b.token);
+    await settle();
+    assert.ok(sent.some((m) => m.to === 'ExponentPushToken[aaa]' && /follow/i.test(m.body)), 'follow notification pushed');
+    assert.equal((await app.q.get("SELECT COUNT(*) n FROM push_tokens WHERE token='ExponentPushToken[dead]'")).n, 0, 'unregistered device token removed');
+    sent.length = 0;
+    await call('POST', `/api/users/${b.id}/follow`, a.token);
+    const cv = await call('POST', '/api/conversations', b.token, { memberIds: [a.id], message: 'my secret plans for friday' });
+    assert.equal(cv.status, 200, JSON.stringify(cv.data));
+    await settle();
+    const dm = sent.find((m) => m.data?.type === 'message');
+    assert.ok(dm, 'message pushed');
+    assert.ok(!JSON.stringify(sent).includes('secret plans'), 'message text never sent to the push service');
+    sent.length = 0;
+    await call('POST', `/api/users/${c.id}/mute`, a.token);
+    await call('POST', `/api/users/${a.id}/follow`, c.token);
+    await settle();
+    assert.equal(sent.length, 0, 'muted accounts do not push');
+    // Signing in on the same phone with another account moves the token.
+    await call('POST', '/api/me/push-tokens', c.token, { token: 'ExponentPushToken[aaa]' });
+    assert.equal((await app.q.get("SELECT user_id FROM push_tokens WHERE token='ExponentPushToken[aaa]'")).user_id, c.id);
+    await call('DELETE', '/api/me/push-tokens', c.token, { token: 'ExponentPushToken[aaa]' });
+    assert.equal((await app.q.get("SELECT COUNT(*) n FROM push_tokens WHERE token='ExponentPushToken[aaa]'")).n, 0);
+  } finally {
+    app.ctx.push = saved;
+    fake.close();
+  }
 });

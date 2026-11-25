@@ -1,15 +1,25 @@
 # One-click Render Blueprint. STAGING: age verification is the labelled test
 # simulator and sample data is seeded. Do not invite the public until a real
 # age-verification provider is connected (the server refuses NODE_ENV=production without one).
+#
+# Data: Render PostgreSQL (below). Media: any S3-compatible bucket (Cloudflare R2,
+# Backblaze B2, AWS S3) — fill in the S3_* values in the dashboard after the first deploy.
+databases:
+  - name: maka-db
+    plan: basic-256mb
+    databaseName: maka
+    user: maka
 services:
   - type: web
     name: maka-staging
     runtime: docker
-    plan: starter            # a persistent disk requires a paid instance
+    plan: starter
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: staging
+      - key: DATABASE_URL
+        fromDatabase: { name: maka-db, property: connectionString }
       - key: MAKA_SECRET
         generateValue: true
       - key: SEED_ADMIN_PASSWORD
@@ -20,7 +30,41 @@ services:
         generateValue: true
       - key: DEFAULT_TERRITORY
         value: CA
-    disk:
-      name: maka-data
-      mountPath: /data
-      sizeGB: 10
+      - key: PAYMENTS_PROVIDER    # stripe (leave empty until your Stripe account is ready)
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: AGE_PROVIDER         # veriff (required before NODE_ENV=production)
+        sync: false
+      - key: AGE_PROVIDER_API_KEY
+        sync: false
+      - key: AGE_PROVIDER_SECRET
+        sync: false
+      - key: LIVE_PROVIDER        # mux (leave empty until your Mux account is ready)
+        sync: false
+      - key: MUX_TOKEN_ID
+        sync: false
+      - key: MUX_TOKEN_SECRET
+        sync: false
+      - key: MUX_WEBHOOK_SECRET
+        sync: false
+      - key: PUSH_PROVIDER        # expo (phone notifications)
+        sync: false
+      - key: MAIL_PROVIDER        # resend or postmark (password-reset email)
+        sync: false
+      - key: MAIL_API_KEY
+        sync: false
+      - key: MAIL_FROM            # e.g. Mäka <no-reply@your-domain>
+        sync: false
+      - key: S3_BUCKET
+        sync: false
+      - key: S3_ENDPOINT
+        sync: false
+      - key: S3_REGION
+        sync: false
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false

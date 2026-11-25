@@ -10,11 +10,11 @@ screens.cinema = async (el) => {
   const r = await api.get('/api/cinema?' + qs);
   const hero = r.items[0];
   const pill = (k, v, label) => `<button class="pill ${cinemaFilter[k] === v ? 'on' : ''}" data-act="cinemaFilter" data-k="${k}" data-v="${v}">${esc(label)}</button>`;
-  el.innerHTML = `<div class="pagehead"><span class="eyebrow">Free to watch · no subscription</span><h1>🎬 Mäka Cinema</h1>
+  el.innerHTML = `<div class="pagehead"><h1>Cinema</h1>
     <p>Films and shows are free with ads, wherever we hold the rights for your region (${esc(r.territory)}).</p></div>
     <div class="pills">${pill('kind', '', 'All')}${pill('kind', 'movie', 'Movies')}${pill('kind', 'series', 'Series')}${pill('kind', 'documentary', 'Documentaries')}${pill('list', 'watchlist', 'My List')}</div>
     <div class="pills">${pill('genre', '', 'Any genre')}${r.genres.map((g) => pill('genre', g, g)).join('')}</div>
-    ${r.licensedCount === 0 ? '<div class="pad"><div class="banner">No films are licensed yet. The titles below are <strong>fictional placeholders</strong> to show how Cinema works — none of them can play.</div></div>' : ''}
+    ${r.licensedCount === 0 ? '<div class="pad"><div class="banner">No films are licensed yet. These are <strong>fictional placeholders</strong> and can’t be played.</div></div>' : ''}
     ${hero && !cinemaFilter.list ? `<div class="hero" style="background-image:url('${attr(hero.posterUrl)}')"><div class="hero-content"><span class="badge">${hero.isPlaceholder ? 'Fictional placeholder' : 'Featured'}</span>
       <h2>${esc(hero.name)}</h2><p>${esc(hero.genres.join(' · '))}</p><button class="button" data-act="openTitle" data-id="${hero.id}">View details</button></div></div>` : ''}
     <div class="pad">${r.continueWatching.length ? `<div class="section-title">Continue watching</div><div class="grid2">${r.continueWatching.map(poster).join('')}</div>` : ''}
@@ -42,7 +42,7 @@ actions.watchlist = async (b) => {
 
 // ======================= CREATE =======================
 screens.create = (el) => {
-  el.innerHTML = `<div class="pagehead"><span class="eyebrow">Your voice matters</span><h1>Create</h1><p>Share an original video or photo. No follower-based tiers — every creator starts on equal footing.</p></div>
+  el.innerHTML = `<div class="pagehead"><h1>Create</h1><p>Share an original video or photo. </p></div>
     <div class="pad"><form data-form="createPost" id="createForm">
       <div class="row"><label class="pill on"><input class="sr" type="radio" name="kind" value="video" checked> ▸ Video</label><label class="pill"><input class="sr" type="radio" name="kind" value="image"> ▧ Photo</label></div>
       <label class="formlabel" for="cfile">Choose or record</label>
@@ -104,7 +104,7 @@ let collabCat = '';
 screens.collabs = async (el) => {
   const r = await api.get('/api/campaigns' + (collabCat ? '?category=' + encodeURIComponent(collabCat) : ''));
   const mine = await api.get('/api/me/applications');
-  el.innerHTML = `<div class="pagehead"><span class="eyebrow">Every creator belongs</span><h1>🤝 Collaborations</h1>
+  el.innerHTML = `<div class="pagehead"><h1>Collabs</h1>
     <p>Paid briefs from verified businesses, open to every 19+ verified creator. Follower counts are visible but never decide who can apply.</p></div>
     <div class="pad"><div class="feature"><strong>Talent over follower count.</strong><p>No nano, micro or mega tiers and no follower minimums. Brands choose on fit, creativity, quality and reliability.</p></div></div>
     <div class="pills"><button class="pill ${!collabCat ? 'on' : ''}" data-act="collabCat" data-v="">All</button>${r.categories.map((c) => `<button class="pill ${collabCat === c ? 'on' : ''}" data-act="collabCat" data-v="${attr(c)}">${esc(c)}</button>`).join('')}</div>
@@ -123,7 +123,7 @@ actions.openCampaign = async (b) => {
   sheet(c.title, `<p>${esc(c.brief)}</p><p><strong>Deliverables:</strong> ${esc(c.deliverables)}</p>
     <p><strong>Pay:</strong> ${money(c.compensationCents, c.currency)} · <strong>Disclosure:</strong> ${esc(c.disclosure)}</p>
     <p><strong>Business:</strong> ${esc(c.business.name)} <span class="tag green">Verified</span></p>
-    <div class="banner">${esc(c.eligibility)}${c.isSample ? ' This is a sample brief — no business will pay through it.' : ''}</div>
+    <div class="banner">${esc(c.eligibility)}${c.isSample ? ' Sample brief: no business pays through it.' : ''}</div>
     ${c.myApplication ? `<p class="tag green">You applied · ${esc(c.myApplication.status)}</p>` : `<form data-form="apply" data-id="${c.id}">
       <label class="formlabel" for="pitch">Your pitch</label><textarea id="pitch" class="field" name="pitch" rows="4" minlength="20" required placeholder="Your idea, why it fits, and how you’ll deliver it."></textarea>
       <label class="formlabel" for="pf">Portfolio post (optional)</label><select id="pf" class="field" name="portfolioPostId"><option value="">None</option>${studio.published.map((p) => `<option value="${p.id}">${esc(p.caption.slice(0, 50) || 'Untitled post')}</option>`).join('')}</select>
@@ -132,14 +132,14 @@ actions.openCampaign = async (b) => {
 forms.apply = async (f) => {
   const b = formData(f);
   await api.post(`/api/campaigns/${f.dataset.id}/apply`, { pitch: b.pitch, portfolioPostId: b.portfolioPostId || null });
-  closeSheet(); toast('Application sent — the brand can now message you'); route();
+  closeSheet(); toast('Application sent'); route();
 };
 
 // ======================= MARKET =======================
 let marketQ = '', marketCat = '';
 screens.market = async (el, storeId) => {
   if (storeId) return storefront(el, storeId);
-  el.innerHTML = `<div class="pagehead"><span class="eyebrow">Discover · connect · grow</span><h1>🛍 Mäka Market</h1><p>Shop verified independent businesses and established brands.</p></div>
+  el.innerHTML = `<div class="pagehead"><h1>Market</h1><p>Shop verified independent businesses and established brands.</p></div>
     <div class="pad"><input class="search" id="mq" placeholder="Search businesses and products…" aria-label="Search marketplace" value="${attr(marketQ)}"><div id="mcats" class="pills" style="padding:0 0 12px"></div><div id="mres" class="grid2"></div>
     <div class="feature" style="margin-top:16px"><strong>Sell on Mäka</strong><p>Register your business for verification, then open a storefront and post creator campaigns.</p><button class="button secondary" style="margin-top:12px" data-go="studio">Business tools →</button></div></div>`;
   let t; $('#mq').addEventListener('input', (e) => { clearTimeout(t); marketQ = e.target.value; t = setTimeout(loadMarket, 200); });
@@ -156,7 +156,7 @@ async function storefront(el, id) {
   const cart = state.cart[id] || {};
   const items = Object.values(cart).reduce((a, n) => a + n, 0);
   el.innerHTML = `<div class="pagehead"><button class="button secondary small" data-go="market">← Market</button><h1 style="margin-top:12px">${esc(r.business.name)}</h1>
-    <p>${esc(r.business.description)}</p><span class="tag green">Verified business</span>${r.business.isSample ? '<span class="tag grey">Sample store — not a real business</span>' : ''}</div>
+    <p>${esc(r.business.description)}</p><span class="tag green">Verified business</span>${r.business.isSample ? '<span class="tag grey">Sample store</span>' : ''}</div>
     <div class="pad"><div class="grid2">${r.products.map((p) => `<div class="tile"><div class="pic" style="background-image:url('${attr(p.imageUrl || '')}')"></div><div class="tiletxt"><strong>${esc(p.name)}</strong><p>${esc(p.description)}</p>
       <div class="row between"><strong>${money(p.priceCents, p.currency)}</strong>${p.inStock ? `<button class="button small" data-act="addCart" data-store="${id}" data-product="${p.id}">Add</button>` : '<span class="tag grey">Sold out</span>'}</div></div></div>`).join('')}</div>
     <div style="margin-top:16px"><button class="button block" data-act="viewCart" data-store="${id}" ${items ? '' : 'disabled'} id="cartBtn">View bag (${items})</button></div></div>`;
@@ -195,7 +195,7 @@ actions.placeOrder = async (b) => {
 screens.inbox = async (el, convId) => {
   if (convId) return thread(el, convId);
   const [convs, notes] = await Promise.all([api.get('/api/conversations'), api.get('/api/notifications')]);
-  el.innerHTML = `<div class="pagehead"><span class="eyebrow">Connect with kindness</span><h1>✉ Inbox</h1><p>Private messages, group chats, brand conversations and activity.</p></div>
+  el.innerHTML = `<div class="pagehead"><h1>Inbox</h1><p>Private messages, group chats, brand conversations and activity.</p></div>
     <div class="pad"><div class="row"><button class="button" data-act="newChat">New message</button><button class="button secondary" data-act="newGroup">New group</button></div>
     <div class="section-title">Messages</div>
     ${convs.map((c) => `<button class="listitem" data-go="inbox/${c.id}">${c.isGroup ? '<span class="avatar">👥</span>' : avatar(c.members[0])}<div class="grow"><strong>${esc(c.title)}</strong>
@@ -254,9 +254,9 @@ screens.studio = async (el) => {
   const e = s.earnings;
   const row = (p, extra = '') => `<div class="listitem"><span class="thumb" style="width:46px;flex:0 0 46px;background-image:url('${attr(p.posterUrl || '')}')"></span><div class="grow"><strong>${esc(p.caption.slice(0, 50) || 'Untitled')}</strong>
     <p>${p.status === 'published' ? `${count(p.views)} views · ${count(p.likes)} likes · ${count(p.comments)} comments` : esc(p.status) + (p.mediaError ? ' · ' + esc(p.mediaError) : '')}</p></div>${extra}</div>`;
-  el.innerHTML = `<div class="pagehead"><span class="eyebrow">Creator Studio</span><h1>Your studio</h1><p>${esc(s.eligibility)}</p></div><div class="pad">
+  el.innerHTML = `<div class="pagehead"><h1>Studio</h1><p>${esc(s.eligibility)}</p></div><div class="pad">
     <div class="metrics"><div class="metric"><strong>${count(s.totals.views)}</strong><span>Views</span></div><div class="metric"><strong>${count(s.totals.likes)}</strong><span>Likes</span></div><div class="metric"><strong>${count(s.totals.comments)}</strong><span>Comments</span></div></div>
-    <div class="section-title">Earnings</div><div class="feature"><span class="eyebrow">From real, compliant revenue only</span>
+    <div class="section-title">Earnings</div><div class="feature">
       <div class="num" style="margin:6px 0">${money(e.availableCents + e.pendingCents, e.currency)}</div>
       <p>Pending ${money(e.pendingCents)} · Available ${money(e.availableCents)} · Paid out ${money(e.paidOutCents)}</p>${e.payoutsNote ? `<p>${esc(e.payoutsNote)}</p>` : ''}</div>
     ${e.ledger.length ? e.ledger.map((x) => `<div class="kv"><span>${esc(x.source)} · ${esc(x.status)}</span><span>${money(x.amountCents, x.currency)}</span></div>`).join('') : ''}
@@ -296,7 +296,7 @@ actions.newProduct = (b) => sheet('Add product', `<form data-form="newProduct" d
 forms.newProduct = async (f) => { const b = formData(f); await api.post(`/api/businesses/${f.dataset.biz}/products`, { name: b.name, description: b.description, priceCents: Math.round(b.price * 100), stock: Number(b.stock) }); closeSheet(); toast('Product added'); };
 actions.applicants = async (b) => {
   const list = await api.get(`/api/businesses/${b.dataset.biz}/applications`);
-  sheet('Applicants', `<p class="subtle">Listed in the order they applied. Judge on the pitch, portfolio and track record — not follower count.</p>
+  sheet('Applicants', `<p class="subtle">In the order they applied.</p>
     ${list.map((a) => `<div class="adminitem"><div class="row">${avatar(a.creator, 30)}<strong class="grow">@${esc(a.creator.handle)}</strong><span class="tag">${esc(a.status)}</span></div>
       <p><em>${esc(a.campaign)}</em></p><p>${esc(a.pitch)}</p><p class="subtle">Completed collaborations: ${a.completedCollaborations}${a.portfolio ? ` · <a href="#/p/${a.portfolio.id}">portfolio post</a>` : ''}</p>
       <div class="row wrap">${['shortlisted', 'accepted', 'declined'].map((s) => `<button class="button small secondary" data-act="decide" data-id="${a.id}" data-s="${s}">${s}</button>`).join('')}<button class="button small" data-go="inbox/${a.conversationId}">Message</button></div></div>`).join('') || '<p class="subtle">No applications yet.</p>'}`);
@@ -315,7 +315,7 @@ screens.settings = async (el) => {
       <div style="margin-top:12px"><button class="button" type="submit">Save</button></div></form>
     <div class="section-title">Blocked accounts</div>${blocked.map((u) => `<div class="listitem">${avatar(u)}<strong class="grow">@${esc(u.handle)}</strong><button class="button secondary small" data-act="unblockUser" data-user="${u.id}">Unblock</button></div>`).join('') || '<p class="subtle">None.</p>'}
     <div class="section-title">Your reports</div>${reports.map((r) => `<div class="kv"><span>${esc(r.reason)} (${esc(r.target_type)})</span><span>${esc(r.status)}</span></div>`).join('') || '<p class="subtle">None.</p>'}
-    <div class="section-title">Account standing</div>${sanctions.map((s) => `<div class="adminitem"><strong>${esc(s.level)}</strong> — ${esc(s.reason)}<br><span class="subtle">${new Date(s.created_at).toLocaleString()}${s.revoked ? ' · overturned' : ''}</span>
+    <div class="section-title">Account standing</div>${sanctions.map((s) => `<div class="adminitem"><strong>${esc(s.level)}:</strong> ${esc(s.reason)}<br><span class="subtle">${new Date(s.created_at).toLocaleString()}${s.revoked ? ' · overturned' : ''}</span>
       ${s.revoked ? '' : `<div style="margin-top:8px"><button class="button small secondary" data-act="appeal" data-id="${s.id}">Appeal</button></div>`}</div>`).join('') || '<p class="subtle">Good standing ✓</p>'}
     <div class="section-title">Orders</div>${orders.map((o) => `<div class="kv"><span>${esc(o.business)} · ${esc(o.status)}</span><span>${money(o.totalCents, o.currency)} ${o.status === 'awaiting_payment' ? `<button class="button small secondary" data-act="cancelOrder" data-id="${o.id}">Cancel</button>` : ''}</span></div>`).join('') || '<p class="subtle">No orders.</p>'}
     <div class="section-title">Your data</div><div class="stack"><button class="button secondary" data-act="exportData">Download my data</button>
@@ -343,21 +343,26 @@ forms.deleteAccount = async (f) => { await api.del('/api/me', formData(f)); api.
 // ======================= TRUST & SAFETY ADMIN =======================
 screens.admin = async (el) => {
   if (state.me.role !== 'admin') { el.innerHTML = '<div class="empty">Not available.</div>'; return; }
-  const [o, reports, appeals, biz, audit] = await Promise.all([api.get('/api/admin/overview'), api.get('/api/admin/reports'), api.get('/api/admin/appeals'), api.get('/api/admin/businesses'), api.get('/api/admin/audit')]);
-  el.innerHTML = `<div class="pagehead"><span class="eyebrow">Trust & Safety</span><h1>Moderation</h1><p>Every action is logged and can be appealed.</p></div><div class="pad">
+  const [o, reports, appeals, biz, audit, ages] = await Promise.all([api.get('/api/admin/overview'), api.get('/api/admin/reports'), api.get('/api/admin/appeals'), api.get('/api/admin/businesses'), api.get('/api/admin/audit'), api.get('/api/admin/age-reviews')]);
+  el.innerHTML = `<div class="pagehead"><h1>Moderation</h1><p>Every action is logged and can be appealed.</p></div><div class="pad">
     <div class="metrics"><div class="metric"><strong>${o.openReports}</strong><span>Open reports</span></div><div class="metric"><strong>${o.openAppeals}</strong><span>Appeals</span></div><div class="metric"><strong>${o.pendingBusinesses}</strong><span>Businesses</span></div></div>
     <div class="section-title">Report queue (highest risk first)</div>
     ${reports.map((r) => `<div class="adminitem"><div class="row between"><strong>${esc(r.reason)} · ${esc(r.targetType)}</strong><span class="tag ${r.priority >= 4 ? 'red' : ''}">P${r.priority}${r.systemGenerated ? ' · auto' : ''}</span></div>
-      <p class="subtle">${esc(r.details)}</p>${r.evidence ? `<pre>${esc(r.evidence)}</pre>` : ''}<p class="subtle">Target: ${r.targetUser ? '@' + esc(r.targetUser.handle) : '—'} · prior sanctions: ${r.sanctionHistory.length} · suggested: <strong>${esc(r.recommendedLevel)}</strong></p>
+      <p class="subtle">${esc(r.details)}</p>${r.evidence ? `<pre>${esc(r.evidence)}</pre>` : ''}<p class="subtle">Target: ${r.targetUser ? '@' + esc(r.targetUser.handle) : 'none'} · prior sanctions: ${r.sanctionHistory.length} · suggested: <strong>${esc(r.recommendedLevel)}</strong></p>
       <form data-form="resolve" data-id="${r.id}" class="row wrap"><input class="field" name="note" placeholder="Reason (shown to user)" style="flex:1 1 100%">
       ${['dismiss', 'approve_content', 'remove_content', 'warning', 'restrict', 'suspend', 'ban', 'escalate'].map((a) => `<button class="button small ${a === 'ban' ? 'danger' : 'secondary'}" type="submit" data-action="${a}">${a.replace('_', ' ')}</button>`).join('')}</form></div>`).join('') || '<p class="subtle">Queue is clear.</p>'}
     <div class="section-title">Appeals</div>${appeals.map((a) => `<div class="adminitem"><strong>@${esc(a.user.handle)}</strong> appeals ${esc(a.sanction?.level)}: ${esc(a.sanction?.reason)}<p>${esc(a.body)}</p>
       <div class="row"><button class="button small" data-act="decideAppeal" data-id="${a.id}" data-d="overturned">Overturn</button><button class="button small secondary" data-act="decideAppeal" data-id="${a.id}" data-d="upheld">Uphold</button></div></div>`).join('') || '<p class="subtle">No open appeals.</p>'}
+    <div class="section-title">Age checks needing a decision</div>${ages.map((a) => `<div class="adminitem"><strong>@${esc(a.handle)}</strong>${a.provider ? ` · ${esc(a.provider)} session ${esc(a.providerRef || 'unknown')}` : ''}
+      <p class="subtle">${esc(a.reason || 'Needs a human decision.')} Look at the session in the provider’s dashboard; Mäka never holds the ID.</p>
+      <form data-form="ageDecide" data-id="${a.userId}" class="row wrap"><input class="field" name="note" placeholder="Reason (kept for audits)" style="flex:1 1 100%">
+      <button class="button small" type="submit" data-d="verified">19 or older</button><button class="button small secondary" type="submit" data-d="failed">Couldn’t confirm</button><button class="button small danger" type="submit" data-d="under_age">Under 19</button></form></div>`).join('') || '<p class="subtle">None waiting.</p>'}
     <div class="section-title">Business verification</div>${biz.map((b) => `<div class="adminitem"><strong>${esc(b.name)}</strong> · ${esc(b.category)} · reg ${esc(b.registration_ref)}
       <div class="row" style="margin-top:8px"><button class="button small" data-act="verifyBiz" data-id="${b.id}" data-d="verified">Verify</button><button class="button small secondary" data-act="verifyBiz" data-id="${b.id}" data-d="rejected">Reject</button></div></div>`).join('') || '<p class="subtle">None pending.</p>'}
     <div class="section-title">Audit log</div>${audit.slice(0, 40).map((a) => `<div class="kv"><span>${esc(a.action)} · ${esc(a.target_type || '')}</span><span class="subtle">${new Date(a.created_at).toLocaleString()}</span></div>`).join('')}</div>`;
 };
 forms.resolve = async (f, ev) => {
   f.dataset.action = ev.submitter?.dataset.action || 'dismiss'; await api.post(`/api/admin/reports/${f.dataset.id}/resolve`, { action: f.dataset.action, note: f.elements.note.value }); toast('Done: ' + f.dataset.action); route(); };
+forms.ageDecide = async (f, ev) => { const d = ev.submitter?.dataset.d || 'failed'; await api.post(`/api/admin/age-reviews/${f.dataset.id}/decide`, { decision: d, note: f.elements.note.value }); toast('Age decision saved'); route(); };
 actions.decideAppeal = async (b) => { await api.post(`/api/admin/appeals/${b.dataset.id}/decide`, { decision: b.dataset.d }); toast('Appeal ' + b.dataset.d); route(); };
 actions.verifyBiz = async (b) => { await api.post(`/api/admin/businesses/${b.dataset.id}/verify`, { decision: b.dataset.d }); toast('Business ' + b.dataset.d); route(); };

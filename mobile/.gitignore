@@ -1,0 +1,11 @@
+node_modules/
+.expo/
+dist/
+web-build/
+*.jks
+*.keystore
+!debug.keystore
+.env*.local
+android/
+ios/
+tests/screens/FAILURE.png

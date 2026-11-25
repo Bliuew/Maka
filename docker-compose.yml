@@ -1,0 +1,15 @@
+# Local development services.
+#   docker compose up -d                       → PostgreSQL only (media on local disk; allowed outside production)
+#   docker compose --profile s3 up -d          → also an S3-compatible emulator on :9000 (in-memory, resets on restart)
+# Then: cp .env.example .env && set -a && . ./.env && set +a && npm start
+services:
+  postgres:
+    image: postgres:16
+    environment: { POSTGRES_USER: maka, POSTGRES_PASSWORD: maka, POSTGRES_DB: maka }
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+  s3:
+    profiles: [s3]
+    image: motoserver/moto:latest
+    ports: ["9000:5000"]
+volumes: { pgdata: {} }

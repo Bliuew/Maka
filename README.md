@@ -4,23 +4,38 @@ Milestone 1 of the Mäka 19+ social platform: a working **backend API** and a **
 
 ## Run it
 
-Requirements: **Node.js 22.5+** and **ffmpeg/ffprobe** on the PATH. There are no npm dependencies.
+Requirements: **Node.js 22.5+**, **ffmpeg/ffprobe** on the PATH, **PostgreSQL**, and an **S3-compatible bucket** in production. `docker compose up -d` starts Postgres locally (add `--profile s3` for an S3 emulator).
 
 ```bash
+docker compose up -d      # Postgres 16 for development
+cp .env.example .env && set -a && . ./.env && set +a
+npm ci
 npm start                 # http://localhost:8080  (seeds clearly-labelled sample data in development)
-npm test                  # 13 API + policy tests
-npm run test:e2e          # 22-step acceptance demo in a phone-sized browser (needs Playwright + Chromium)
+npm test                  # API + policy tests (against DATABASE_URL, and S3 when S3_BUCKET is set)
+npm run test:e2e          # 22-step acceptance demo in a phone-sized browser (npx playwright install chromium first)
 ```
+
+| Setting | Purpose |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string (required). `DATABASE_SSL=1` forces TLS. `DATABASE_SCHEMA` isolates a run in its own schema (tests use this). |
+| `S3_BUCKET`, `S3_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_FORCE_PATH_STYLE=1` | Media storage in any S3-compatible service (AWS S3, Cloudflare R2, Backblaze B2, Wasabi). Without `S3_BUCKET` media is kept on local disk, which is allowed **only outside production**. `S3_CREATE_BUCKET=1` creates the bucket (dev/CI). |
+| `PAYMENTS_PROVIDER=stripe`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `PLATFORM_FEE_BPS` (default 0), `SHIP_COUNTRIES` (default `CA,US`), `STRIPE_AUTOMATIC_TAX=1` | Market checkout through Stripe. Each business connects its own Stripe Express account, and buyers pay on Stripe's hosted page. Point a Stripe webhook at `/api/payments/webhook` for `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `charge.refunded`, `charge.dispute.created` and `account.updated`. |
+| `AGE_PROVIDER=veriff`, `AGE_PROVIDER_API_KEY`, `AGE_PROVIDER_SECRET` | Real 19+ checks through Veriff (government ID, or ID plus selfie). Point Veriff's decision webhook at `/api/age/webhook`. The birth date is compared with 19 once and never stored; only the outcome and a keyed hash of the document are kept. Checks Veriff can't settle go to the moderators' age-review queue. |
+| `LIVE_PROVIDER=mux`, `MUX_TOKEN_ID`, `MUX_TOKEN_SECRET`, `MUX_WEBHOOK_SECRET` | Live streaming through Mux. Hosts broadcast from any RTMP app (Larix Broadcaster, Streamlabs, OBS) with the server address and private key Mäka shows, and viewers watch in the app. Point a Mux webhook at `/api/live/webhook`. Stream keys are never stored and are disabled when a live ends. |
+| `PUSH_PROVIDER=expo`, optional `EXPO_ACCESS_TOKEN` | Phone notifications through Expo's push service (APNs and FCM). The app build also needs an EAS project ID (`extra.eas.projectId` in `mobile/app.json`) and, for Android, Firebase credentials uploaded to EAS. Message text is never put in a push, only who it's from. |
+| `MAIL_PROVIDER` (`resend` or `postmark`), `MAIL_API_KEY`, `MAIL_FROM` | Email for password resets. Required in production. Without it (outside production) reset emails are not sent; the link is printed in the server log instead. |
+
+Uploaded chunks are stored as parts in the bucket and the byte offset is kept in Postgres, so a resumable upload can continue on a different server instance. Transcoding runs in a temporary directory, and the results (`media/<id>/video.mp4`, `poster.jpg`) are uploaded back. Media is still served through signed, expiring `/media/...` URLs with Range support, which are proxied from the bucket.
 
 Dev moderator login: `trust.safety@sample.maka.test` / `dev-admin-password` (change it with `SEED_ADMIN_PASSWORD`).
 
-**To try it on a phone:** run the server on a machine on your Wi-Fi, then open `http://<that-computer's-IP>:8080`. Use **Add to Home Screen** to install it with the bee icon. Camera upload and installing to the home screen need HTTPS, so for real devices put it behind HTTPS (for example a tunnel or your host's TLS).
+**To try it on a phone:** run the server on a machine on your Wi-Fi, then open `http://<that-computer's-IP>:8080`. Use **Add to Home Screen** to install it with the Mäka app icon. Camera upload and installing to the home screen need HTTPS, so for real devices put it behind HTTPS (for example a tunnel or your host's TLS).
 
 ## What works (tested)
 
 | Area | Working now |
 |---|---|
-| Accounts | Sign-up, sign-in and sign-out. Passwords are hashed with scrypt. Sessions use hashed bearer tokens (no cookies, so no CSRF risk). Includes data export and account deletion. |
+| Accounts | Sign-up, sign-in and sign-out. Passwords are hashed with scrypt. Sessions use hashed bearer tokens (no cookies, so no CSRF risk). Includes data export, account deletion and **password reset by email** (single-use links that expire in 30 minutes, stored only as a hash, and that sign you out everywhere; the response never reveals whether an email has an account). |
 | 19+ gate | A user picks **one** method: government ID, ID + selfie, digital credential, bank, or manual review. Nothing in the community is reachable until the check is verified. An under-19 result closes the account and scrubs its personal data. Only the outcome is stored, never ID images. |
 | Video | Chunked, **resumable** uploads. ffprobe validates the file and rejects non-media. ffmpeg transcodes to H.264/AAC with faststart, creates a poster frame, and strips metadata including location. Media URLs are signed and expiring, with Range streaming. Supports WebVTT captions, alt text and drafts. |
 | Feed | Full-screen vertical snap feed. Videos autoplay when in view and pause when not. The next video preloads. Tap pauses, double-tap likes, mute toggles. Includes For You / Following, infinite loading, view counting, keyboard navigation and screen-reader labels. |
@@ -32,39 +47,51 @@ Dev moderator login: `trust.safety@sample.maka.test` / `dev-admin-password` (cha
 | Messaging | 1:1 and group chats, realtime delivery (SSE with automatic reconnect), unread counts, and who-can-message-me settings. Blocking is enforced. Threatening messages are held. |
 | Cinema | Catalogue with filters, My List and continue-watching. A title plays **only** when a rights window covers the viewer's territory and a licensed stream exists. Placeholder titles can never play. Includes an admin licensing portal for titles and rights windows. |
 | Collabs | Businesses must be verified before posting. Briefs **reject follower minimums or tiers**, both as fields and in the brief text. Any verified creator can apply. Applications open a brand conversation. Contracts move through offer → sign → deliver → approve, and approval adds a pending earnings entry. |
-| Market | Storefronts for verified businesses, product listings, search, and a bag. Orders are priced on the server, check stock, and can be cancelled. Checkout **refuses** to run until a payment provider is connected. |
+| Market | Storefronts for verified businesses, product listings, search, and a bag. Orders are priced on the server, check stock, and can be cancelled. Checkout runs through **Stripe** once keys are set: each business connects its own Stripe account and buyers pay on Stripe's secure page. Orders become paid only through a signed webhook. Replayed events are ignored, and a payment that arrives after the buyer cancelled is refunded automatically. Without keys, checkout refuses and no payment is taken. |
 | Studio | Real stats, drafts, processing/held items, an earnings ledger (starts at $0, no sample income), applications and contracts, and business tools. |
 | Admin | Reports, appeals, business verification, titles and rights, and the audit log. |
 
 ## Stubs and items needing credentials, contracts or more work
 
-1. **Age verification provider.** A test simulator stands in for it and is labelled TEST on screen. The server **refuses to start in production** with it. Needs: a contract with a provider that supports a 19+ threshold (e.g. Yoti, Persona, Veriff, IDnow), API keys, and a webhook adapter in `server/age.js`. `/api/age/webhook` returns 501 until then.
-2. **Payments and payouts.** Needs Stripe Connect or an equivalent: KYC for businesses and creators, tax handling, and refunds and disputes through the provider. Checkout returns `payments_not_configured`. Approved collaborations show as *pending* and are never paid out.
+1. **Age verification provider.** A Veriff connector is built and tested (signed decisions, strict 19+ from the date of birth, under-19 accounts closed, and a human review queue). Without keys the labelled TEST simulator is used, and the server **refuses to start in production** with it. Needs: a Veriff account and its API key and shared secret. The digital-ID and bank methods need a provider that offers them.
+2. **Payments and payouts.** Market checkout is built on Stripe Connect. Needs: a Stripe account with Connect enabled, the keys and webhook above, and a decision on the platform fee and on Stripe Tax. Refunds are issued from the Stripe dashboard; the order updates by webhook. **Collab payouts to creators are not built yet.** Approved collaborations still show as *pending* and are never paid out.
 3. **Film licensing.** No titles are licensed. Needs rights contracts, a CDN with DRM/HLS, an ad server (SSAI), captions per title, and a trusted geo-IP service. The territory is currently a config value (`DEFAULT_TERRITORY=CA`).
 4. **Automated moderation.** The text screen is a deterministic first layer. Needs a hate-speech lexicon maintained by Trust & Safety (`MAKA_LEXICON_FILE`), ML text and image/video classifiers, CSAM hash matching (e.g. PhotoDNA), and malware scanning of uploads (`MEDIA_SCANNER`).
-5. **Push notifications.** In-app realtime works. Native push needs APNs and FCM keys.
-6. **Native iOS/Android apps (next milestone).** This build is a web client that installs to the home screen. The React Native / Expo app needs a session where npm installs are allowed, plus an Apple Developer account and a Google Play console for builds. It will call this same API. No store submission has happened.
-7. **Scale and operations.** Planned moves: SQLite → Postgres with row-level security, local disk → object storage plus a transcoding queue, in-memory rate limits and realtime → Redis. Also needed: CI/CD, monitoring and backups. Every query is already written against a small helper, so the data layer can be swapped.
-8. **Legal.** Terms, Privacy Policy, Community Guidelines and retention periods need legal review (GDPR, PIPEDA and local law). The registration ID, contact and appeal email addresses are placeholders.
-9. **Branding.** `web/assets/icon-*.png` is an **interim** bee-only icon cut from the approved wordmark. Overlapping letter strokes were painted out and the bee was not redrawn (`scripts/make_bee_icon.py`). Swap in the illustrator's standalone transparent export when it's ready.
+5. **Live streaming.** Built on Mux. Needs a Mux account and the keys above. Broadcasting from inside the Mäka app (no separate streaming app) would need a native camera-streaming library and a new app build.
+6. **Email.** Password-reset email is built for Resend or Postmark. Needs an account with one of them, a verified sending domain, and `MAIL_PROVIDER`, `MAIL_API_KEY` and `MAIL_FROM`.
+7. **Push notifications.** Built: the app asks permission after sign-in, registers the phone, and opens the right screen when a notification is tapped. The server respects mutes and blocks and removes dead tokens. Needs: an Expo (EAS) project, a Firebase project for Android, and an Apple Developer account for iOS.
+8. **Native apps and stores.** The Expo app in `mobile/` is built. Android APKs are built by GitHub Actions and published as GitHub Releases. iOS builds need the Apple Developer Program. **Nothing has been submitted to TestFlight or Google Play.** `docs/store/` has everything prepared for submission and the steps that need your accounts.
+9. **Scale and operations.** Done: PostgreSQL and S3-compatible object storage, and CI against both. Still to do: transcoding still runs inside the web process, so it should move to a job queue. Rate limits and realtime fan-out are in-memory, so several instances need Redis (or Postgres LISTEN/NOTIFY). Monitoring, backups and Postgres row-level security also need setting up.
+10. **Legal.** Terms, Privacy Policy, Community Guidelines and retention periods need legal review (GDPR, PIPEDA and local law). The registration ID, contact and appeal email addresses are placeholders.
+11. **Branding.** The app icon is the founder's honeycomb "M" design (`web/assets/app-icon-design.webp`, supplied 25 Nov 2026 and replacing the earlier bee-only icon). Every icon size is generated from it by `mobile/scripts/make_app_icons.py`, which only resizes it. The supplied file is 512 px, so the 1024 px store icon is slightly soft. Export the same design at 1024 px or larger, or as SVG, and run the script again. The approved wordmark (`approved-logo.webp`) is unchanged and is still used on the welcome screen.
 
 All sample creators, brands, products, campaigns and films are flagged `is_sample` or `is_placeholder`, labelled in the UI, and seeded only in development.
+
+## Native app (Android and iOS)
+
+`mobile/` is an Expo (React Native, TypeScript) app with the same screens and policies as the web client. See [`mobile/README.md`](mobile/README.md).
+
+- **Android test build:** the latest APK is always at <https://github.com/Bliuew/Maka/releases/latest/download/maka.apk>, or scan [`docs/android-download-qr.png`](docs/android-download-qr.png). Testers allow "install from this source" when asked. Until you set the `MAKA_API_URL` repository variable, enter your server's HTTPS address on the welcome screen (Server settings).
+- **Store readiness:** [`docs/store/`](docs/store/README.md) has the privacy, data-safety, age-rating and UGC-moderation answers and the review notes. Not submitted.
+- **Policy pages** served by this server: `/privacy.html`, `/terms.html`, `/guidelines.html`, `/account-deletion.html`. These are drafts that need legal review.
 
 ## Layout
 
 ```
-server/   index.js · app.js · db.js (schema) · http.js · media.js · safety.js · age.js · seed.js · routes/*
-web/      index.html · app.css · js/{api,core,ui,app,sections}.js · assets/
+server/   index.js · app.js · db.js (Postgres schema + helpers) · storage.js (S3 / local) · http.js · media.js · safety.js · age.js · seed.js · routes/*
+web/      index.html · app.css · js/{api,core,ui,app,sections}.js · assets/ · privacy/terms/guidelines/account-deletion pages
 tests/    api.test.js · e2e.mjs · screens/ (latest E2E screenshots)
-docs/     CLAUDE_BUILD_BRIEF.md
+mobile/   Expo app: src/app (screens) · src/core (tested client logic) · src/lib · plugins · tests
+docs/     CLAUDE_BUILD_BRIEF.md · store/ (submission prep) · android-download-qr.png
+.github/  workflows/ci.yml (API, E2E, mobile) · workflows/android-apk.yml (APK → GitHub Release)
 ```
 
 ## Deploy a private staging server
 
-The repo includes a `Dockerfile` (Node 22 + ffmpeg), a Render Blueprint (`render.yaml`) and `railway.json`.
+The repo includes a `Dockerfile` (Node 22 + ffmpeg), a Render Blueprint (`render.yaml`) and `railway.json`. The container is stateless: data is in Postgres and media in your bucket.
 
-- **Render:** New → Blueprint → pick this repo. Render generates `MAKA_SECRET`, `SEED_ADMIN_PASSWORD` and `INVITE_CODE`; find them under the service's **Environment** tab. A persistent disk is mounted at `/data`, so posts survive redeploys. Disks need a paid instance (Starter).
-- **Railway:** New Project → Deploy from GitHub repo, then add a Volume mounted at `/data` and set `NODE_ENV=staging`, `MAKA_SECRET`, `INVITE_CODE` and `SEED_ADMIN_PASSWORD`.
+- **Render:** New → Blueprint → pick this repo. It creates a Render PostgreSQL database and wires `DATABASE_URL`. Render generates `MAKA_SECRET`, `SEED_ADMIN_PASSWORD` and `INVITE_CODE` (find them under the service's **Environment** tab). Fill in the `S3_*` values for your bucket (for example Cloudflare R2).
+- **Railway:** New Project → Deploy from GitHub repo, add the **PostgreSQL** plugin (it sets `DATABASE_URL`), then set `NODE_ENV=staging`, `MAKA_SECRET`, `INVITE_CODE`, `SEED_ADMIN_PASSWORD` and the `S3_*` values.
 
 Staging runs the **labelled age-verification simulator**, so keep it invite-only (`INVITE_CODE`). The server refuses `NODE_ENV=production` until a real 19+ provider is connected.
 
@@ -74,4 +101,11 @@ Staging runs the **labelled age-verification simulator**, so keep it invite-only
 2. Open **Secrets** and add `MAKA_SECRET` (any long random text), `INVITE_CODE` (the code testers type at sign-up) and `SEED_ADMIN_PASSWORD` (moderator password).
 3. Press **Run** to try it in the preview, then **Publish → Reserved VM**. You get a `https://<name>.replit.app` address.
 
-**Data persistence:** posts, accounts and videos are kept on local disk for now, so a republish can reset them. The next milestone moves them to Replit's PostgreSQL database and App Storage.
+**Data persistence:** add Replit's **PostgreSQL** database (it sets `DATABASE_URL`). For media, add `S3_*` secrets for an S3-compatible bucket such as Cloudflare R2. Replit's own App Storage does not offer S3 keys, so the S3 driver can't use it.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push and pull request. It has two jobs, and both use a Postgres 16 service and an S3-compatible server (moto):
+
+- **API tests:** `npm test`.
+- **End-to-end:** `npm run test:e2e` in headless Chromium at iPhone 13 size. The screenshots are uploaded as a build artifact.

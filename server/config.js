@@ -25,6 +25,8 @@ export const config = {
 
   // Payments (Stripe Connect or equivalent). Off until keys exist.
   paymentsProvider: env.PAYMENTS_PROVIDER || null,
+  // Live streaming service (livekit / mux / cloudflare). Off until an account and keys exist.
+  liveProvider: env.LIVE_PROVIDER || null,
   // Push notifications (APNs / FCM). Off until keys exist.
   pushProvider: env.PUSH_PROVIDER || null,
   // Automated media/text classifiers & malware scanning. Off until configured.
@@ -35,7 +37,8 @@ export const config = {
   defaultTerritory: env.DEFAULT_TERRITORY || 'CA',
 
   uploads: {
-    chunkSize: 1024 * 1024,
+    chunkSize: 4 * 1024 * 1024,        // suggested client chunk size
+    maxChunkBytes: 16 * 1024 * 1024,   // largest single PUT accepted
     maxVideoBytes: 500 * 1024 * 1024,
     maxImageBytes: 15 * 1024 * 1024,
     maxVideoSeconds: 600,
@@ -51,7 +54,13 @@ export function assertProductionSafe() {
   if (!process.env.MAKA_SECRET) problems.push('MAKA_SECRET is not set');
   if (config.ageProvider === 'test') problems.push('AGE_PROVIDER=test (simulator) cannot run in production');
   if (!config.ageProviderKey) problems.push('AGE_PROVIDER_API_KEY missing');
+  if (config.ageProvider === 'veriff' && !process.env.AGE_PROVIDER_SECRET) problems.push('AGE_PROVIDER_SECRET (Veriff shared secret) missing');
+  if (!['test', 'veriff'].includes(config.ageProvider)) problems.push(`AGE_PROVIDER=${config.ageProvider} has no adapter`);
   if (config.seedSamples) problems.push('SEED_SAMPLES must be 0 in production');
+  if (!process.env.DATABASE_URL) problems.push('DATABASE_URL (PostgreSQL) is not set');
+  if (process.env.PAYMENTS_PROVIDER === 'stripe' && !(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_WEBHOOK_SECRET)) problems.push('PAYMENTS_PROVIDER=stripe needs STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET');
+  if (!process.env.MAIL_PROVIDER) problems.push('MAIL_PROVIDER (email for password resets) is not set');
+  if (!process.env.S3_BUCKET) problems.push('S3_BUCKET (object storage for media) is not set');
   if (problems.length) {
     throw new Error('Refusing to start in production:\n - ' + problems.join('\n - '));
   }
