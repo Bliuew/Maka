@@ -1,6 +1,6 @@
 // One full-screen story in the vertical feed.
 import React, { useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { Animated, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useEvent } from 'expo';
 import { Image } from 'expo-image';
@@ -12,7 +12,7 @@ import { api, media } from '../lib/client';
 import { count } from '../core/format';
 import { colors, font, type, words } from '../lib/theme';
 import { Icon, type IconName } from './ui';
-import { Hex, HexAvatar } from './hex';
+import { Hex, HexAvatar, Honeycomb } from './hex';
 import { type Post } from './post';
 import { useSession } from '../lib/session';
 
@@ -72,6 +72,45 @@ function Caption({ text }: { text: string }) {
   return <Text style={s.caption} numberOfLines={3}>{parts.map((p, i) => (p.startsWith('#') ? <Text key={i} style={{ color: colors.gold }}>{p}</Text> : p))}</Text>;
 }
 
+/** Full-screen text post on one of the brand backgrounds. */
+function TextCard({ text, style }: { text: string; style?: string | null }) {
+  const { width } = useWindowDimensions();
+  const look = style === 'midnight' ? { bg: [colors.pane, colors.bg] as const, fg: colors.cream }
+    : style === 'cream' ? { bg: [colors.cream, '#eadbb9'] as const, fg: colors.onGold }
+      : { bg: [colors.honeyTop, colors.honeyBottom] as const, fg: colors.onGold };
+  const size = text.length < 60 ? 36 : text.length < 160 ? 28 : 22;
+  return (
+    <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }]}>
+      <LinearGradient colors={look.bg} style={StyleSheet.absoluteFill} />
+      {style === 'midnight' ? <View style={[StyleSheet.absoluteFill, { opacity: 0.35 }]}><Honeycomb width={width} height={1000} cell={44} /></View> : null}
+      <Text style={{ color: look.fg, fontFamily: font.display, fontSize: size, lineHeight: size * 1.18, letterSpacing: -0.5, textAlign: 'center', paddingRight: 40 }}>
+        {text.split(/(#[\p{L}\p{N}_]+)/u).map((t, i) => (t.startsWith('#') ? <Text key={i} style={{ color: style === 'midnight' ? colors.gold : '#7a4e00' }}>{t}</Text> : t))}
+      </Text>
+    </View>
+  );
+}
+
+/** Swipeable photos of a carousel post, with page dots. Each page keeps tap / double-tap. */
+function Carousel({ images, height, onTap, handle, altText }: { images: { url: string }[]; height: number; onTap: () => void; handle: string; altText?: string }) {
+  const { width } = useWindowDimensions();
+  const [page, setPage] = useState(0);
+  return (
+    <View style={StyleSheet.absoluteFill}>
+      <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} onMomentumScrollEnd={(e) => setPage(Math.round(e.nativeEvent.contentOffset.x / width))}
+        accessibilityLabel={`Photos by @${handle}, ${images.length} photos. Swipe left or right.`}>
+        {images.map((img, i) => (
+          <Pressable key={img.url} onPress={onTap} style={{ width, height }} accessibilityRole="image" accessibilityLabel={`Photo ${i + 1} of ${images.length}${altText ? ': ' + altText : ''}`} testID="carousel-page">
+            <Image source={{ uri: media(img.url)! }} style={{ width, height }} contentFit="cover" />
+          </Pressable>
+        ))}
+      </ScrollView>
+      <View style={s.dots} pointerEvents="none">
+        {images.map((_, i) => <View key={i} style={[s.dot, i === page && s.dotOn]} />)}
+      </View>
+    </View>
+  );
+}
+
 export default function FeedItem(p: Props) {
   const { post } = p;
   const { me } = useSession();
@@ -109,7 +148,9 @@ export default function FeedItem(p: Props) {
 
   return (
     <View style={[s.story, { height: p.height }]} accessibilityLabel={`Post by @${post.author.handle}`} testID={`story-${post.id}`}>
-      {still ? <Image source={{ uri: still }} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} /> : null}
+      {post.kind === 'text' ? <TextCard text={post.caption} style={post.textStyle} />
+        : post.kind === 'carousel' ? null
+        : still ? <Image source={{ uri: still }} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} /> : null}
       {video && p.nearby ? <Player uri={video} active={p.active} muted={p.muted} onPausedChange={setPaused} ref={playRef} /> : null}
       <LinearGradient colors={['rgba(0,0,0,0.45)', 'transparent']} style={s.topShade} pointerEvents="none" />
       <LinearGradient colors={['transparent', 'rgba(0,0,0,0.65)']} style={s.bottomShade} pointerEvents="none" />
@@ -117,6 +158,7 @@ export default function FeedItem(p: Props) {
         accessibilityLabel={`${post.kind === 'video' ? 'Video' : 'Photo'} by @${post.author.handle}${post.altText ? ': ' + post.altText : ''}. Tap to ${paused ? 'play' : 'pause'}, double-tap to like.`}
         accessibilityActions={[{ name: 'activate' }, { name: 'longpress', label: 'Like' }]}
         onAccessibilityAction={(e) => { if (e.nativeEvent.actionName === 'longpress') like(); else playRef.current?.toggle(); }} testID="story-surface" />
+      {post.kind === 'carousel' && post.images?.length ? <Carousel images={post.images} height={p.height} onTap={onSurface} handle={post.author.handle} altText={post.altText} /> : null}
       {p.header}
       {video ? (
         <Pressable style={s.mute} onPress={p.onToggleMute} accessibilityRole="button" accessibilityLabel={p.muted ? 'Unmute' : 'Mute'} hitSlop={10}>
@@ -132,7 +174,7 @@ export default function FeedItem(p: Props) {
         <Pressable onPress={() => router.push(`/u/${post.author.handle}`)} accessibilityRole="button" accessibilityLabel={`Open @${post.author.handle}’s profile`} style={{ alignSelf: 'flex-start' }}>
           <Text style={s.handle}>@{post.author.handle}</Text>
         </Pressable>
-        {post.caption ? <Caption text={post.caption} /> : null}
+        {post.caption && post.kind !== 'text' ? <Caption text={post.caption} /> : null}
         {post.kind === 'video' ? (
           <View style={s.sound}><Icon name="musical-notes-outline" size={16} color={colors.gold} /><Text style={s.soundText} numberOfLines={1}>Original sound - {post.author.displayName}</Text></View>
         ) : null}
@@ -172,6 +214,9 @@ const s = StyleSheet.create({
   story: { width: '100%', backgroundColor: '#000', overflow: 'hidden' },
   topShade: { position: 'absolute', top: 0, left: 0, right: 0, height: 140 },
   bottomShade: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 280 },
+  dots: { position: 'absolute', bottom: 8, alignSelf: 'center', flexDirection: 'row', gap: 6 },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(244,234,213,0.4)' },
+  dotOn: { backgroundColor: colors.gold, width: 16 },
   track: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 2, backgroundColor: 'rgba(255,255,255,0.18)' },
   progress: { height: 2, backgroundColor: colors.cream },
   mute: { position: 'absolute', top: 56, right: 16, backgroundColor: 'rgba(0,0,0,0.35)', borderRadius: 18, width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },

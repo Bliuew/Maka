@@ -101,7 +101,10 @@ export async function createApp({ databaseUrl, schema, storage } = {}) {
         id: p.id, kind: p.kind, caption: p.caption, altText: p.alt_text, status: p.status,
         author: await ctx.publicUser(author, viewerId),
         videoUrl: ready && p.kind === 'video' ? signMediaUrl(m.id, m.file) : null,
-        imageUrl: ready && p.kind === 'image' ? signMediaUrl(m.id, m.file) : null,
+        imageUrl: ready && (p.kind === 'image' || p.kind === 'carousel') ? signMediaUrl(m.id, m.file) : null,
+        images: p.kind === 'carousel' ? (await q.all(`SELECT m.id, m.file, m.width, m.height FROM post_media pm JOIN media m ON m.id=pm.media_id
+          WHERE pm.post_id=? AND m.status='ready' ORDER BY pm.position`, p.id)).map((x) => ({ url: signMediaUrl(x.id, x.file), width: x.width, height: x.height })) : null,
+        textStyle: p.kind === 'text' ? p.text_style || 'honey' : null,
         posterUrl: ready ? signMediaUrl(m.id, m.poster) : null,
         captionsUrl: p.captions_vtt ? `/api/posts/${p.id}/captions.vtt` : null,
         mediaStatus: m?.status || null, mediaError: m?.error || null,

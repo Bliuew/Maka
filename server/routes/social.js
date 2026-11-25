@@ -71,24 +71,52 @@ export function registerSocial(r, ctx) {
   });
 
   // ---------------- posts ----------------
+  // Post kinds: video / image (one upload), carousel (2–10 uploaded photos, in order)
+  // and text (no media; screened like captions). Text styles are fixed backgrounds.
+  const TEXT_STYLES = ['honey', 'midnight', 'cream'];
+  const mediaInUse = async (mid) => !!(await q.get('SELECT 1 FROM posts WHERE media_id=? UNION SELECT 1 FROM post_media WHERE media_id=?', mid, mid));
+
   r.post('/api/posts', {}, async ({ user, body }) => {
     ctx.requireWrite(user);
     ctx.limiter.check('post:' + user.id, 30, 30 / 60);
     const b = await body();
-    const m = (await q.get('SELECT * FROM media WHERE id=? AND owner_id=?', b.mediaId, user.id)) || fail(400, 'media_required', 'Attach a video or photo.');
-    if (m.status === 'rejected') fail(400, 'media_rejected', m.error);
-    if (await q.get('SELECT 1 FROM posts WHERE media_id=?', m.id)) fail(409, 'media_already_used');
-    const caption = String(b.caption || '').slice(0, 2200);
+    const kind = ['text', 'carousel'].includes(b.kind) ? b.kind : 'media';
+    let caption = String(b.caption || '').slice(0, 2200);
+    let media = null, carousel = [], textStyle = null, mediaReady = true;
+    if (kind === 'text') {
+      caption = caption.trim().slice(0, 500);
+      if (!caption) fail(400, 'text_required', 'Write something to post.');
+      textStyle = TEXT_STYLES.includes(b.textStyle) ? b.textStyle : 'honey';
+    } else if (kind === 'carousel') {
+      const ids = Array.isArray(b.mediaIds) ? [...new Set(b.mediaIds.map(String))] : [];
+      if (ids.length < 2 || ids.length > 10) fail(400, 'carousel_size', 'A carousel needs 2 to 10 photos.');
+      for (const mid of ids) {
+        const m = (await q.get("SELECT * FROM media WHERE id=? AND owner_id=? AND kind='image'", mid, user.id)) || fail(400, 'media_required', 'Every carousel item must be one of your photos.');
+        if (m.status === 'rejected') fail(400, 'media_rejected', m.error);
+        if (m.status !== 'ready') fail(409, 'media_not_ready', 'Wait until every photo has finished processing.');
+        if (await mediaInUse(m.id)) fail(409, 'media_already_used');
+        carousel.push(m);
+      }
+      media = carousel[0];
+    } else {
+      media = (await q.get('SELECT * FROM media WHERE id=? AND owner_id=?', b.mediaId, user.id)) || fail(400, 'media_required', 'Attach a video or photo.');
+      if (media.status === 'rejected') fail(400, 'media_rejected', media.error);
+      if (await mediaInUse(media.id)) fail(409, 'media_already_used');
+      mediaReady = media.status === 'ready';
+    }
     const remix = ['everyone', 'followers', 'nobody'].includes(b.remixPolicy) ? b.remixPolicy : user.default_remix;
     const screen = screenText(caption);
-    let status = b.draft ? 'draft' : m.status === 'ready' ? 'published' : 'processing';
+    let status = b.draft ? 'draft' : mediaReady ? 'published' : 'processing';
     if (screen.action === 'hold' && status !== 'draft') status = 'held';
     let vtt = null;
-    if (b.captionsVtt) { vtt = String(b.captionsVtt).slice(0, 100000); if (!vtt.startsWith('WEBVTT')) fail(400, 'invalid_captions', 'Captions must be WebVTT.'); }
+    if (b.captionsVtt && kind === 'media') { vtt = String(b.captionsVtt).slice(0, 100000); if (!vtt.startsWith('WEBVTT')) fail(400, 'invalid_captions', 'Captions must be WebVTT.'); }
     const pid = id('p_');
-    await q.run(`INSERT INTO posts (id,author_id,media_id,kind,caption,alt_text,captions_vtt,status,allow_comments,remix_policy,is_paid_partnership,created_at,published_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`, pid, user.id, m.id, m.kind, caption, String(b.altText || '').slice(0, 300), vtt, status,
-      b.allowComments === false ? 0 : 1, remix, b.paidPartnership ? 1 : 0, now(), status === 'published' ? now() : null);
+    await q.tx(async () => {
+      await q.run(`INSERT INTO posts (id,author_id,media_id,kind,caption,alt_text,captions_vtt,text_style,status,allow_comments,remix_policy,is_paid_partnership,created_at,published_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, pid, user.id, media?.id || null, kind === 'media' ? media.kind : kind, caption, String(b.altText || '').slice(0, 300), vtt, textStyle, status,
+        b.allowComments === false ? 0 : 1, remix, b.paidPartnership ? 1 : 0, now(), status === 'published' ? now() : null);
+      for (const [i, m] of carousel.entries()) await q.run('INSERT INTO post_media (post_id,media_id,position) VALUES (?,?,?)', pid, m.id, i);
+    });
     if (status === 'held') {
       await q.run('INSERT INTO reports (id,reporter_id,target_type,target_id,target_user_id,reason,details,evidence,priority,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
         id('r_'), 'system', 'post', pid, user.id, 'other', 'Automatic hold: ' + screen.reasons.join(', '), caption, 3, now());
@@ -124,7 +152,7 @@ export function registerSocial(r, ctx) {
       await q.run('UPDATE posts SET remix_policy=? WHERE id=?', b.remixPolicy, p.id);
     }
     if (b.publish && p.status === 'draft') {
-      const m = await q.get('SELECT status FROM media WHERE id=?', p.media_id);
+      const m = p.media_id ? await q.get('SELECT status FROM media WHERE id=?', p.media_id) : { status: 'ready' };
       await q.run('UPDATE posts SET status=?, published_at=? WHERE id=?', m.status === 'ready' ? 'published' : 'processing', m.status === 'ready' ? now() : null, p.id);
     }
     return ctx.serializePost(await getPost(p.id), user.id);

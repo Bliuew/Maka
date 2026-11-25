@@ -409,3 +409,46 @@ test('Market product feed lists products from verified stores only', async () =>
   assert.ok(!feed.items.some((p) => p.business === 'Pending Shop'));
   void pending;
 });
+
+const pic = path.join(dataDir, 'p.png');
+execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=320x400', '-frames:v', '1', pic]);
+async function uploadImage(user) {
+  const buf = fs.readFileSync(pic);
+  const u = await call('POST', '/api/uploads', user.token, { kind: 'image', size: buf.length });
+  await call('PUT', `/api/uploads/${u.data.uploadId}?offset=0`, user.token, new Uint8Array(buf));
+  await call('POST', `/api/uploads/${u.data.uploadId}/complete`, user.token);
+  for (let i = 0; i < 100; i++) { const s = await call('GET', `/api/uploads/${u.data.uploadId}`, user.token); if (s.data.status !== 'processing') break; await new Promise((r) => setTimeout(r, 120)); }
+  return u.data.uploadId;
+}
+
+test('Text posts: published with a style, screened like captions, no media', async () => {
+  resetLimits();
+  const a = await adult();
+  const t = await call('POST', '/api/posts', a.token, { kind: 'text', caption: 'Honey thought for the day #hive', textStyle: 'midnight' });
+  assert.equal(t.status, 200, JSON.stringify(t.data));
+  assert.equal(t.data.post.kind, 'text'); assert.equal(t.data.post.textStyle, 'midnight'); assert.equal(t.data.post.status, 'published');
+  assert.equal(t.data.post.videoUrl, null); assert.equal(t.data.post.imageUrl, null);
+  assert.equal((await call('POST', '/api/posts', a.token, { kind: 'text', caption: '   ' })).data.error, 'text_required');
+  const abusive = await call('POST', '/api/posts', a.token, { kind: 'text', caption: 'you are so worthless' });
+  assert.equal(abusive.data.post.status, 'held', 'abusive text posts are held for review');
+  const feed = await call('GET', '/api/feed', (await adult()).token);
+  assert.ok(feed.data.items.some((p) => p.id === t.data.post.id));
+});
+
+test('Carousel posts: 2 to 10 ready photos, in order, never reused', async () => {
+  resetLimits();
+  const a = await adult();
+  const ids = [await uploadImage(a), await uploadImage(a), await uploadImage(a)];
+  assert.equal((await call('POST', '/api/posts', a.token, { kind: 'carousel', mediaIds: ids.slice(0, 1) })).data.error, 'carousel_size');
+  const c = await call('POST', '/api/posts', a.token, { kind: 'carousel', mediaIds: ids, caption: 'Three looks' });
+  assert.equal(c.status, 200, JSON.stringify(c.data));
+  assert.equal(c.data.post.kind, 'carousel'); assert.equal(c.data.post.images.length, 3);
+  assert.equal(c.data.post.imageUrl, c.data.post.images[0].url);
+  assert.equal((await fetch(base + c.data.post.images[2].url)).status, 200);
+  assert.equal((await call('POST', '/api/posts', a.token, { kind: 'carousel', mediaIds: ids.slice(1) })).data.error, 'media_already_used');
+  const other = await adult();
+  const notMine = await call('POST', '/api/posts', other.token, { kind: 'carousel', mediaIds: [await uploadImage(other), ids[0]] });
+  assert.equal(notMine.data.error, 'media_required');
+  const pending = await call('POST', '/api/uploads', a.token, { kind: 'image', size: 10 });
+  assert.equal((await call('POST', '/api/posts', a.token, { kind: 'carousel', mediaIds: [await uploadImage(a), pending.data.uploadId] })).data.error, 'media_not_ready');
+});

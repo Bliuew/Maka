@@ -49,6 +49,9 @@ const web = http.createServer((req, res) => {
 await new Promise((r) => web.listen(webPort, r));
 const base = `http://localhost:${webPort}`;
 
+const photoA = path.join(dataDir, 'look-a.png'), photoB = path.join(dataDir, 'look-b.png');
+execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'color=c=0xC4922E:s=600x800', '-frames:v', '1', photoA]);
+execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'color=c=0x1B1814:s=600x800', '-frames:v', '1', photoB]);
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ ...devices['iPhone 13'] });
 const page = await ctx.newPage();
@@ -133,6 +136,37 @@ try {
     await page.getByText('Held for review · only you can see this').waitFor();
     await shot('comments');
     await page.getByTestId('sheet-close').click();
+  });
+
+  await step('Create a text post (honey background) and see it', async () => {
+    await tab('Create a post').click();
+    await page.getByRole('button', { name: 'Text' }).filter({ visible: true }).first().click();
+    await tid('text-body').fill('Small steps, golden days #hive');
+    await page.getByRole('radio', { name: 'midnight background' }).click();
+    await tid('next-edit').click();
+    await tid('original').click();
+    await tid('publish').click();
+    await page.waitForURL(/\/p\//, { timeout: 20000 });
+    await page.getByText('Small steps, golden days').first().waitFor();
+    await shot('text-post');
+    await page.goBack();
+  });
+
+  await step('Create a carousel of two photos and swipe it', async () => {
+    await tab('Create a post').click();
+    await page.getByRole('button', { name: 'Carousel' }).filter({ visible: true }).first().click();
+    const chooser = page.waitForEvent('filechooser');
+    await tid('pick-photos').click();
+    await (await chooser).setFiles([photoA, photoB]);
+    await page.getByText('2 of 10 photos').waitFor();
+    await tid('next-edit').click();
+    await tid('caption').fill('Two looks #carousel');
+    await tid('original').click();
+    await tid('publish').click();
+    await page.waitForURL(/\/p\//, { timeout: 60000 });
+    await page.waitForFunction(() => document.querySelectorAll('[data-testid=carousel-page]').length === 2, null, { timeout: 20000 });
+    await shot('carousel-post');
+    await page.goBack();
   });
 
   await step('Cinema: placeholder titles cannot play', async () => {

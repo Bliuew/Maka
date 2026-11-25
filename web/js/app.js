@@ -102,7 +102,8 @@ function storyHTML(p, { withTabs = true } = {}) {
   const a = p.author;
   const media = p.kind === 'video'
     ? `<video playsinline loop ${state.muted ? 'muted' : ''} preload="metadata" poster="${attr(p.posterUrl || '')}" data-src="${attr(p.videoUrl || '')}" aria-label="Video by @${attr(a.handle)}${p.altText ? ': ' + attr(p.altText) : ''}">${p.captionsUrl ? `<track kind="captions" srclang="en" label="Captions" src="${attr(p.captionsUrl)}" default>` : ''}</video>`
-    : `<img class="still" src="${attr(p.imageUrl || p.posterUrl || '')}" alt="${attr(p.altText || 'Photo by @' + a.handle)}">`;
+    : p.kind === 'text' ? `<div class="textpost ${attr(p.textStyle || 'honey')}" role="img" aria-label="Text post by @${attr(a.handle)}"><p>${esc(p.caption)}</p></div>`
+    : `<img class="still" src="${attr(p.imageUrl || p.posterUrl || '')}" alt="${attr(p.altText || 'Photo by @' + a.handle)}">${p.kind === 'carousel' && p.images ? `<span class="carouselcount">1 / ${p.images.length}</span>` : ''}`;
   const me = state.me.id === a.id;
   return `<section class="story" data-post="${p.id}" data-author="${a.id}" aria-label="Post by @${attr(a.handle)}">
     ${media}
@@ -111,7 +112,7 @@ function storyHTML(p, { withTabs = true } = {}) {
     <div class="pausehint" aria-hidden="true">❚❚</div>
     <div class="storybody"><div class="handle"><button class="who" data-go="u/${attr(a.handle)}">${avatar(a)}<span>@${esc(a.handle)}</span></button>
       ${me ? '' : `<button class="followbtn" data-act="follow" data-user="${a.id}" aria-pressed="${a.isFollowing}">${a.isFollowing ? 'Following' : '+ Follow'}</button>`}</div>
-      <div class="caption">${esc(p.caption)}</div>
+      ${p.kind === 'text' ? '' : `<div class="caption">${esc(p.caption)}</div>`}
       ${p.isPaidPartnership ? '<div class="tagline">Paid partnership</div>' : ''}${a.isSample ? '<div class="tagline">Sample account</div>' : ''}
       ${p.status !== 'published' ? `<div class="tagline">Status: ${esc(p.status)}</div>` : ''}</div>
     <div class="actions">

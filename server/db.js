@@ -83,7 +83,7 @@ CREATE TABLE IF NOT EXISTS posts (
   id TEXT PRIMARY KEY,
   author_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   media_id TEXT REFERENCES media(id),
-  kind TEXT NOT NULL CHECK (kind IN ('video','image')),
+  kind TEXT NOT NULL CHECK (kind IN ('video','image','carousel','text')),
   caption TEXT NOT NULL DEFAULT '',
   captions_vtt TEXT,
   alt_text TEXT NOT NULL DEFAULT '',
@@ -97,6 +97,18 @@ CREATE TABLE IF NOT EXISTS posts (
 );
 CREATE INDEX IF NOT EXISTS posts_author ON posts(author_id, created_at);
 CREATE INDEX IF NOT EXISTS posts_status ON posts(status, published_at);
+-- Text and carousel posts (added after launch: keep existing databases in step).
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS text_style TEXT;
+ALTER TABLE posts DROP CONSTRAINT IF EXISTS posts_kind_check;
+ALTER TABLE posts ADD CONSTRAINT posts_kind_check CHECK (kind IN ('video','image','carousel','text'));
+-- Photos of a carousel post, in order (posts.media_id holds the first one).
+CREATE TABLE IF NOT EXISTS post_media (
+  post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  media_id TEXT NOT NULL REFERENCES media(id),
+  position INTEGER NOT NULL,
+  PRIMARY KEY (post_id, position)
+);
+CREATE INDEX IF NOT EXISTS post_media_media ON post_media(media_id);
 
 CREATE TABLE IF NOT EXISTS likes (user_id TEXT, post_id TEXT, created_at BIGINT, PRIMARY KEY (user_id, post_id));
 CREATE TABLE IF NOT EXISTS saves (user_id TEXT, post_id TEXT, created_at BIGINT, PRIMARY KEY (user_id, post_id));
