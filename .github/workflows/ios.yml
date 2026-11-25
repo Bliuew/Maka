@@ -56,10 +56,20 @@ jobs:
           WS=$(ls -d ios/*.xcworkspace | head -1)
           SCHEME=$(basename "$WS" .xcworkspace)
           echo "Workspace $WS, scheme $SCHEME"
-          set -o pipefail
+          status=0
           xcodebuild -workspace "$WS" -scheme "$SCHEME" -configuration Release \
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | tail -n 60
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build > xcodebuild.log 2>&1 || status=$?
+          echo "::group::Errors"; grep -nE "error:|fatal error|The following build commands failed" -A4 xcodebuild.log | head -n 150 || true; echo "::endgroup::"
+          tail -n 40 xcodebuild.log
+          exit $status
+      - name: Keep the build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: mobile/xcodebuild.log
+          retention-days: 7
       - name: Package the .app
         run: |
           APP=$(ls -d build/Build/Products/Release-iphonesimulator/*.app | head -1)
