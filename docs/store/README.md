@@ -40,7 +40,7 @@ All four are **drafts for legal review**. Each page marks its placeholders, such
 ### Apple (TestFlight → App Store)
 - [ ] Apple Developer Program membership (US$99/year).
 - [ ] An App Store Connect app record with bundle ID `io.github.bliuew.maka` (or your own).
-- [ ] An iOS build: `eas build -p ios --profile production` (needs an Expo account linked to your Apple account), or a Mac with Xcode after `npx expo prebuild -p ios`.
+- [ ] An iOS build. The GitHub workflow `.github/workflows/ios.yml` already compiles the app for the iOS Simulator on every push. Once you add the secret `EXPO_TOKEN` (after the one-time setup at the top of that file), the same workflow builds a signed app and sends it to TestFlight.
 - [ ] App Privacy answers (`apple-privacy-labels.md`), age rating 18+ (`age-rating.md`), review notes and demo account (`review-notes.md`).
 - [ ] External TestFlight testers need a Beta App Review. Internal testers (up to 100 team members) don't.
 
