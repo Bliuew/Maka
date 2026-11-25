@@ -53,20 +53,30 @@ Dev moderator login: `trust.safety@sample.maka.test` / `dev-admin-password` (cha
 3. **Film licensing.** No titles are licensed. Needs rights contracts, a CDN with DRM/HLS, an ad server (SSAI), captions per title, and a trusted geo-IP service. The territory is currently a config value (`DEFAULT_TERRITORY=CA`).
 4. **Automated moderation.** The text screen is a deterministic first layer. Needs a hate-speech lexicon maintained by Trust & Safety (`MAKA_LEXICON_FILE`), ML text and image/video classifiers, CSAM hash matching (e.g. PhotoDNA), and malware scanning of uploads (`MEDIA_SCANNER`).
 5. **Push notifications.** In-app realtime works. Native push needs APNs and FCM keys.
-6. **Native iOS/Android apps (next milestone).** This build is a web client that installs to the home screen. The React Native / Expo app needs a session where npm installs are allowed, plus an Apple Developer account and a Google Play console for builds. It will call this same API. No store submission has happened.
+6. **Native apps and stores.** The Expo app in `mobile/` is built. Android APKs are built by GitHub Actions and published as GitHub Releases. iOS builds need the Apple Developer Program. **Nothing has been submitted to TestFlight or Google Play.** `docs/store/` has everything prepared for submission and the steps that need your accounts.
 7. **Scale and operations.** Done: PostgreSQL and S3-compatible object storage, and CI against both. Still to do: transcoding still runs inside the web process, so it should move to a job queue. Rate limits and realtime fan-out are in-memory, so several instances need Redis (or Postgres LISTEN/NOTIFY). Monitoring, backups and Postgres row-level security also need setting up.
 8. **Legal.** Terms, Privacy Policy, Community Guidelines and retention periods need legal review (GDPR, PIPEDA and local law). The registration ID, contact and appeal email addresses are placeholders.
 9. **Branding.** `web/assets/icon-*.png` is an **interim** bee-only icon cut from the approved wordmark. Overlapping letter strokes were painted out and the bee was not redrawn (`scripts/make_bee_icon.py`). Swap in the illustrator's standalone transparent export when it's ready.
 
 All sample creators, brands, products, campaigns and films are flagged `is_sample` or `is_placeholder`, labelled in the UI, and seeded only in development.
 
+## Native app (Android and iOS)
+
+`mobile/` is an Expo (React Native, TypeScript) app with the same screens and policies as the web client. See [`mobile/README.md`](mobile/README.md).
+
+- **Android test build:** the latest APK is always at <https://github.com/Bliuew/Maka/releases/latest/download/maka.apk>, or scan [`docs/android-download-qr.png`](docs/android-download-qr.png). Testers allow "install from this source" when asked. Until you set the `MAKA_API_URL` repository variable, enter your server's HTTPS address on the welcome screen (Server settings).
+- **Store readiness:** [`docs/store/`](docs/store/README.md) has the privacy, data-safety, age-rating and UGC-moderation answers and the review notes. Not submitted.
+- **Policy pages** served by this server: `/privacy.html`, `/terms.html`, `/guidelines.html`, `/account-deletion.html`. These are drafts that need legal review.
+
 ## Layout
 
 ```
 server/   index.js · app.js · db.js (Postgres schema + helpers) · storage.js (S3 / local) · http.js · media.js · safety.js · age.js · seed.js · routes/*
-web/      index.html · app.css · js/{api,core,ui,app,sections}.js · assets/
+web/      index.html · app.css · js/{api,core,ui,app,sections}.js · assets/ · privacy/terms/guidelines/account-deletion pages
 tests/    api.test.js · e2e.mjs · screens/ (latest E2E screenshots)
-docs/     CLAUDE_BUILD_BRIEF.md
+mobile/   Expo app: src/app (screens) · src/core (tested client logic) · src/lib · plugins · tests
+docs/     CLAUDE_BUILD_BRIEF.md · store/ (submission prep) · android-download-qr.png
+.github/  workflows/ci.yml (API, E2E, mobile) · workflows/android-apk.yml (APK → GitHub Release)
 ```
 
 ## Deploy a private staging server

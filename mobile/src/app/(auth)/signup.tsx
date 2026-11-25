@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { Button, Check, Field, P, Screen } from '../../components/ui';
-import { api } from '../../lib/client';
+import * as Linking from 'expo-linking';
+import { Button, Check, Field, Row, Screen } from '../../components/ui';
+import { api, serverUrl } from '../../lib/client';
 import { useSession } from '../../lib/session';
 import { useToast } from '../../lib/toast';
 
@@ -29,7 +30,11 @@ export default function SignUp() {
       {invite ? <Field label="Invite code" value={f.inviteCode} onChangeText={up('inviteCode')} autoCapitalize="none" /> : null}
       <Check value={accept} onChange={setAccept} testID="su-terms"
         label="I agree to the Community Guidelines (no bullying, racism, threats, doxxing or ridicule) and the Terms & Privacy Policy." />
-      <P muted>Privacy Policy and Terms: available from Settings once you join, and on the Mäka website.</P>
+      <Row wrap style={{ marginTop: 8 }}>
+        {[['Community Guidelines', '/guidelines.html'], ['Terms', '/terms.html'], ['Privacy Policy', '/privacy.html']].map(([label, path]) => (
+          <Button key={path} title={label} small variant="secondary" label={`Open ${label}`} onPress={() => Linking.openURL(serverUrl() + path)} />
+        ))}
+      </Row>
       <Button title="Continue to age check" block onPress={submit} testID="su-submit" />
     </Screen>
   );

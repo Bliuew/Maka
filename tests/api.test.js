@@ -354,3 +354,21 @@ test('Production refuses to start without Postgres and object storage', () => {
   assert.match(r.stderr, /DATABASE_URL/);
   assert.match(r.stderr, /S3_BUCKET/);
 });
+
+test('Store readiness: privacy policy, terms, guidelines and account-deletion pages are served', async () => {
+  const pages = {
+    '/privacy.html': [/strictly for adults 19\+/i, /never receive or store images of your ID/i, /Draft for legal review/],
+    '/terms.html': [/no tolerance for objectionable content/i, /at least 19/],
+    '/guidelines.html': [/Stitches, remixes or duets made to ridicule a person/, /different reviewer/],
+    '/account-deletion.html': [/Delete account/, /never stored/],
+  };
+  for (const [p, patterns] of Object.entries(pages)) {
+    const r = await fetch(base + p);
+    assert.equal(r.status, 200, p);
+    const html = await r.text();
+    for (const re of patterns) assert.match(html, re, p);
+    assert.ok(html.includes('Mäka'), p);
+    // Policy text may say there are *no* public dislike counts; it must never describe one.
+    assert.ok(!/dislike/i.test(html.replace(/no public dislike counts/gi, '')), p);
+  }
+});

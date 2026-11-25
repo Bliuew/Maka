@@ -24,7 +24,7 @@ screens.signup = async (el) => {
       <label class="formlabel" for="su-handle">Handle</label><input id="su-handle" class="field" name="handle" autocomplete="username" placeholder="yourname" required>
       <label class="formlabel" for="su-name">Display name</label><input id="su-name" class="field" name="displayName" required maxlength="40">
       ${health.inviteRequired ? '<label class="formlabel" for="su-invite">Invite code</label><input id="su-invite" class="field" name="inviteCode" required autocomplete="off">' : ''}
-      <label class="check"><input type="checkbox" name="acceptTerms"> <span>I agree to the Community Guidelines (no bullying, racism, threats, doxxing or ridicule) and the Terms &amp; Privacy Policy.</span></label>
+      <label class="check"><input type="checkbox" name="acceptTerms"> <span>I agree to the <a href="/guidelines.html" target="_blank" rel="noopener">Community Guidelines</a> (no bullying, racism, threats, doxxing or ridicule) and the <a href="/terms.html" target="_blank" rel="noopener">Terms</a> &amp; <a href="/privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</span></label>
       <button class="button block" type="submit">Continue to age check</button></form></div>`;
 };
 forms.signup = async (f) => {
