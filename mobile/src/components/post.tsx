@@ -99,7 +99,7 @@ export function CommentsSheet({ postId, visible, onClose, onCountChange }: { pos
 
 // ---------- reporting ----------
 let reasonsCache: Record<string, string> | null = null;
-type ReportTarget = { type: 'post' | 'comment' | 'user' | 'message'; id: string; label?: string };
+type ReportTarget = { type: 'post' | 'comment' | 'user' | 'message' | 'live'; id: string; label?: string };
 
 export function ReportSheet({ target, onClose, onBlocked }: { target: ReportTarget | null; onClose: () => void; onBlocked?: () => void }) {
   return (

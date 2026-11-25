@@ -159,8 +159,8 @@ export default function Create() {
     return (
       <Screen title="Create" right={<Pressable onPress={() => router.navigate('/')} accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} style={{ marginTop: 6 }}><Icon name="close" size={30} /></Pressable>}>
         {resumeBanner}
-        <Pills label="Post type" value={mode} onChange={(v) => { setMode(v); setPicked(null); }}
-          options={[{ value: 'video', label: 'Video' }, { value: 'image', label: 'Photo' }, { value: 'carousel', label: 'Carousel' }, { value: 'text', label: 'Text' }]} />
+        <Pills label="Post type" value={mode} onChange={(v) => { if (v === 'live') { router.push('/live'); return; } setMode(v as Mode); setPicked(null); }}
+          options={[{ value: 'video', label: 'Video' }, { value: 'image', label: 'Photo' }, { value: 'carousel', label: 'Carousel' }, { value: 'text', label: 'Text' }, { value: 'live', label: 'Live' }]} />
         <View style={st.panel}>
           {mode === 'text' ? (
             <View style={{ alignSelf: 'stretch', gap: 12 }}>

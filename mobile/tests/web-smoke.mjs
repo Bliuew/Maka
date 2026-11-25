@@ -169,6 +169,16 @@ try {
     await page.goBack();
   });
 
+  await step('Live: says plainly it is not connected without a streaming provider', async () => {
+    await tab('Create a post').click();
+    await page.getByRole('button', { name: 'Live' }).filter({ visible: true }).first().click();
+    await tid('live-title').fill('Studio session');
+    await tid('go-live').click();
+    await page.getByText(/streaming isn’t connected yet/i).first().waitFor();
+    await shot('live');
+    await page.goBack();
+  });
+
   await step('Cinema: placeholder titles cannot play', async () => {
     await tab('Cinema').click();
     await page.getByText(/Placeholder title/).first().waitFor();

@@ -14,7 +14,10 @@ const recent = (): string[] => { try { return JSON.parse(store.get(store.KEYS.re
 export default function Discover() {
   const router = useRouter();
   const { me, unread } = useSession();
-  const { data, error, reload, refreshing } = useLoad(() => api.get('/api/discover'));
+  const { data, error, reload, refreshing } = useLoad(async () => {
+    const [d, live] = await Promise.all([api.get('/api/discover'), api.get('/api/live').catch(() => ({ streams: [] }))]);
+    return { ...d, live: live.streams };
+  });
   const [q, setQ] = useState('');
   const [results, setResults] = useState<any>(null);
   const [history, setHistory] = useState<string[]>(recent);
@@ -73,6 +76,20 @@ export default function Discover() {
         ) : <Empty icon="search-outline">Searching…</Empty>
       ) : (
         <>
+          {data.live.length ? (
+            <>
+              <Overline>Live now</Overline>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 14, paddingRight: 20 }} style={{ marginHorizontal: -20, paddingLeft: 20 }}>
+                {data.live.map((l: any) => (
+                  <Pressable key={l.id} onPress={() => router.push(`/live/${l.id}`)} accessibilityRole="button" accessibilityLabel={`@${l.host.handle} is live: ${l.title}`} style={{ alignItems: 'center', width: 84 }}>
+                    <HexAvatar user={l.host} size={64} />
+                    <Text style={s.liveBadge}>LIVE</Text>
+                    <Text style={{ color: colors.text, fontSize: 13 }} numberOfLines={1}>@{l.host.handle}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </>
+          ) : null}
           <Overline>Emerging creators</Overline>
           {data.creators.length ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingRight: 20 }} style={{ marginHorizontal: -20, paddingLeft: 20 }}>
@@ -125,6 +142,7 @@ const s = StyleSheet.create({
   tagRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 15, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineStrong },
   tag: { color: colors.text, fontSize: 17, fontFamily: font.medium },
   tagCount: { color: colors.muted, fontSize: 14 },
+  liveBadge: { marginTop: -10, backgroundColor: colors.gold, color: colors.onGold, fontFamily: font.bold, fontSize: 10, letterSpacing: 1, paddingHorizontal: 6, borderRadius: 4, overflow: 'hidden', marginBottom: 4 },
   brand: { flexDirection: 'row', alignItems: 'center', gap: 18, borderRadius: 14, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.pane, padding: 20, marginBottom: 10 },
   brandName: { ...type.title },
   brandSub: { color: colors.muted, fontSize: 15, marginTop: 2 },

@@ -21,6 +21,8 @@ export default function AppLayout() {
       <Stack.Screen name="settings" options={{ title: 'Settings & safety' }} />
       <Stack.Screen name="admin" options={{ title: '' }} />
       <Stack.Screen name="collabs" options={{ title: '' }} />
+      <Stack.Screen name="live/index" options={{ title: '' }} />
+      <Stack.Screen name="live/[id]" options={{ title: '' }} />
     </Stack>
   );
 }
