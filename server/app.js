@@ -1,6 +1,7 @@
 import http from 'node:http';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { createMailer } from './mail.js';
 import { config } from './config.js';
 import { openDb, helpers, id, now } from './db.js';
 import { createStorage } from './storage.js';
@@ -20,7 +21,7 @@ const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
 /** Map an array through an async function, in order. */
 export const mapAsync = (list, fn) => Promise.all(list.map(fn));
 
-export async function createApp({ databaseUrl, schema, storage } = {}) {
+export async function createApp({ databaseUrl, schema, storage, mailer } = {}) {
   const db = await openDb({ url: databaseUrl, schema });
   const q = helpers(db);
   storage = storage || await createStorage();
@@ -41,7 +42,7 @@ export async function createApp({ databaseUrl, schema, storage } = {}) {
 
   // ---- shared helpers used by route modules -------------------------------
   const ctx = {
-    db, q, storage, limiter, events, config, mapAsync,
+    db, q, storage, limiter, events, config, mapAsync, mail: mailer || createMailer(),
     async audit(actorId, action, targetType, targetId, details = {}) {
       await q.run('INSERT INTO audit_log (actor_id, action, target_type, target_id, details, created_at) VALUES (?,?,?,?,?,?)',
         actorId, action, targetType, targetId, JSON.stringify(details), now());

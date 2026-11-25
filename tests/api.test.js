@@ -473,3 +473,45 @@ test('Live: refused honestly without a streaming provider; streams can be report
   assert.equal((await call('GET', '/api/live', viewer.token)).data.streams.length, 0);
   assert.equal((await call('POST', '/api/live/lv_test/end', viewer.token)).status, 403);
 });
+
+test('password reset: no account enumeration, single-use expiring token, signs out everywhere', async () => {
+  resetLimits();
+  const u = await adult('resetme');
+  const outbox = app.ctx.mail.outbox;
+  outbox.length = 0;
+  const unknown = await call('POST', '/api/auth/forgot', null, { email: 'nobody-here@ex.com' });
+  assert.equal(unknown.status, 200);
+  assert.equal(outbox.length, 0);
+  const known = await call('POST', '/api/auth/forgot', null, { email: 'resetme@ex.com' });
+  assert.deepEqual(known.data, unknown.data, 'same response whether or not the account exists');
+  assert.equal(outbox.length, 1);
+  const token = new URL(outbox[0].text.match(/https?:\/\/\S+/)[0]).searchParams.get('token');
+  const row = await app.db.query(`SELECT token_hash FROM ${schema}.password_resets`);
+  assert.ok(!row.rows.some((r) => r.token_hash === token), 'only a hash of the token is stored');
+  assert.equal((await call('POST', '/api/auth/reset', null, { token, password: 'short' })).status, 400);
+  assert.equal((await call('POST', '/api/auth/reset', null, { token, password: 'a-brand-new-password' })).status, 200);
+  assert.equal((await call('GET', '/api/me', u.token)).status, 401, 'old sessions are signed out');
+  assert.equal((await call('POST', '/api/auth/reset', null, { token, password: 'another-new-password' })).data.error, 'reset_invalid', 'token is single-use');
+  assert.equal((await call('POST', '/api/auth/login', null, { email: 'resetme@ex.com', password: 'long-enough-pw' })).status, 401);
+  assert.equal((await call('POST', '/api/auth/login', null, { email: 'resetme@ex.com', password: 'a-brand-new-password' })).status, 200);
+  await call('POST', '/api/auth/forgot', null, { email: 'resetme@ex.com' });
+  const t2 = new URL(outbox.at(-1).text.match(/https?:\/\/\S+/)[0]).searchParams.get('token');
+  await app.db.query(`UPDATE ${schema}.password_resets SET expires_at=0`);
+  assert.equal((await call('POST', '/api/auth/reset', null, { token: t2, password: 'expired-link-password' })).data.error, 'reset_invalid', 'expired tokens are refused');
+});
+
+test('mail adapters call the provider API with the key', async () => {
+  const { createMailer } = await import('../server/mail.js');
+  const http = await import('node:http');
+  const seen = [];
+  const fake = http.createServer((req, res) => { let b = ''; req.on('data', (d) => { b += d; }); req.on('end', () => { seen.push({ url: req.url, headers: req.headers, body: JSON.parse(b) }); res.end('{}'); }); });
+  await new Promise((r) => fake.listen(0, r));
+  const apiBase = `http://localhost:${fake.address().port}`;
+  const msg = { to: 'a@ex.com', subject: 'S', text: 'T', html: '<p>T</p>' };
+  await createMailer({ MAIL_PROVIDER: 'resend', MAIL_API_KEY: 'rk', MAIL_API_BASE: apiBase, MAIL_FROM: 'M <n@x.test>' }).send(msg);
+  await createMailer({ MAIL_PROVIDER: 'postmark', MAIL_API_KEY: 'pk', MAIL_API_BASE: apiBase, MAIL_FROM: 'M <n@x.test>' }).send(msg);
+  fake.close();
+  assert.equal(seen[0].url, '/emails'); assert.equal(seen[0].headers.authorization, 'Bearer rk'); assert.deepEqual(seen[0].body.to, ['a@ex.com']);
+  assert.equal(seen[1].url, '/email'); assert.equal(seen[1].headers['x-postmark-server-token'], 'pk'); assert.equal(seen[1].body.To, 'a@ex.com');
+  await assert.rejects(createMailer({ NODE_ENV: 'production' }).send(msg), /not configured/);
+});

@@ -24,6 +24,7 @@ const normEmail = (e) => {
   if (domain === 'gmail.com' || domain === 'googlemail.com') { local = local.replace(/\./g, ''); domain = 'gmail.com'; }
   return `${local}@${domain}`;
 };
+const escapeHtml = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const HANDLE_RE = /^[a-z0-9._]{3,24}$/i;
 const RESERVED = ['admin', 'maka', 'support', 'help', 'official', 'moderator', 'security'];
 
@@ -85,6 +86,43 @@ export function registerAuth(r, ctx) {
     if (['ineligible', 'deleted'].includes(u.status)) fail(403, 'account_closed', 'This account is not active.');
     if (u.status === 'suspended' && u.suspended_until > now()) fail(403, 'account_suspended', 'This account is suspended.', { until: u.suspended_until });
     return { token: await createSession(u.id, req), user: await me(u) };
+  });
+
+  // Password reset. The response never reveals whether an account exists.
+  // Tokens are random, stored only as a hash, single-use and expire after 30 minutes.
+  r.post('/api/auth/forgot', { auth: 'public' }, async ({ req, body }) => {
+    const b = await body();
+    ctx.limiter.check('forgot:' + clientIp(req), 5, 5 / 60);
+    const email = String(b.email || '').trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) fail(400, 'invalid_email', 'Enter a valid email address.');
+    const u = await q.get('SELECT * FROM users WHERE email_norm=?', normEmail(email));
+    if (u && !['deleted', 'ineligible'].includes(u.status)) {
+      try { ctx.limiter.check('forgot-user:' + u.id, 3, 3 / 60); } catch { return { ok: true }; }
+      const token = crypto.randomBytes(32).toString('base64url');
+      await q.run('INSERT INTO password_resets (token_hash,user_id,created_at,expires_at) VALUES (?,?,?,?)', sha('reset:' + token), u.id, now(), now() + 30 * 6e4);
+      const link = `${ctx.config.publicOrigin}/reset.html?token=${token}`;
+      // A delivery failure is logged, not shown, so the response can't reveal whether the account exists.
+      await ctx.mail.send({ to: u.email, subject: 'Reset your Mäka password',
+        text: `Hi ${u.display_name},\n\nUse this link to choose a new password. It works once and expires in 30 minutes:\n${link}\n\nIf you didn’t ask for this, you can ignore this email. Your password won’t change.\n\nMäka`,
+        html: `<p>Hi ${escapeHtml(u.display_name)},</p><p>Use this link to choose a new password. It works once and expires in 30 minutes:</p><p><a href="${link}">Choose a new password</a></p><p>If you didn’t ask for this, you can ignore this email. Your password won’t change.</p><p>Mäka</p>` }).catch((e) => console.error('password reset email failed:', e.code || e.message));
+    }
+    return { ok: true };
+  });
+
+  r.post('/api/auth/reset', { auth: 'public' }, async ({ req, body }) => {
+    const b = await body();
+    ctx.limiter.check('reset:' + clientIp(req), 10, 10 / 60);
+    const password = String(b.password || '');
+    if (password.length < 10) fail(400, 'weak_password', 'Use at least 10 characters for your password.');
+    const row = await q.get('SELECT * FROM password_resets WHERE token_hash=?', sha('reset:' + String(b.token || '')));
+    if (!row || row.used_at || row.expires_at < now()) fail(400, 'reset_invalid', 'This link has expired or was already used. Ask for a new one.');
+    await q.tx(async () => {
+      await q.run('UPDATE users SET pass_hash=? WHERE id=?', await hashPassword(password), row.user_id);
+      await q.run('UPDATE password_resets SET used_at=? WHERE user_id=? AND used_at IS NULL', now(), row.user_id);
+      await q.run('DELETE FROM sessions WHERE user_id=?', row.user_id); // sign out everywhere
+      await ctx.audit(row.user_id, 'password_reset', 'user', row.user_id, {});
+    });
+    return { ok: true };
   });
 
   r.post('/api/auth/logout', { auth: 'session' }, async ({ req }) => {

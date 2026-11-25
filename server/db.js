@@ -37,6 +37,13 @@ CREATE TABLE IF NOT EXISTS users (
 -- Handles are unique regardless of letter case.
 CREATE UNIQUE INDEX IF NOT EXISTS users_handle_ci ON users (lower(handle));
 
+CREATE TABLE IF NOT EXISTS password_resets (
+  token_hash TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  created_at BIGINT NOT NULL,
+  expires_at BIGINT NOT NULL,
+  used_at BIGINT
+);
 CREATE TABLE IF NOT EXISTS sessions (
   token_hash TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer"><meta name="robots" content="noindex">
+<title>Choose a new password · Mäka</title>
+<link rel="icon" type="image/png" href="/assets/favicon-64.png"><link rel="stylesheet" href="/legal.css">
+</head>
+<body><main>
+<header><img src="/assets/icon-192.png" alt=""><a href="/">Mäka</a></header>
+<h1>Choose a new password</h1>
+<p class="muted">Use at least 10 characters. You’ll be signed out on every device.</p>
+<form id="f">
+  <label for="pw">New password</label>
+  <input id="pw" type="password" autocomplete="new-password" minlength="10" required>
+  <label for="pw2">Confirm new password</label>
+  <input id="pw2" type="password" autocomplete="new-password" minlength="10" required>
+  <button id="go" type="submit">Save new password</button>
+  <p id="msg" class="notice" role="status" hidden></p>
+</form>
+<script src="/js/reset.js"></script>
+</main></body></html>

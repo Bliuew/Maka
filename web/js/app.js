@@ -40,7 +40,21 @@ screens.signin = (el) => {
     <h1 style="margin:16px 0 14px">Welcome back</h1>
     <form data-form="signin"><label class="formlabel" for="si-email">Email</label><input id="si-email" class="field" name="email" type="email" autocomplete="email" required>
     <label class="formlabel" for="si-pass">Password</label><input id="si-pass" class="field" name="password" type="password" autocomplete="current-password" required>
-    <div style="margin-top:16px"><button class="button block" type="submit">Sign in</button></div></form></div>`;
+    <div style="margin-top:16px"><button class="button block" type="submit">Sign in</button></div></form>
+    <button class="button secondary block" data-go="forgot" style="margin-top:8px">Forgot password?</button></div>`;
+};
+screens.forgot = (el) => {
+  el.innerHTML = `<div class="auth"><button class="button secondary small" data-go="signin" style="align-self:flex-start">← Back</button>
+    <h1 style="margin:16px 0 8px">Reset password</h1><p class="muted">Enter the email on your account. We’ll send a link to choose a new password.</p>
+    <form data-form="forgot"><label class="formlabel" for="fp-email">Email</label><input id="fp-email" class="field" name="email" type="email" autocomplete="email" required>
+    <div style="margin-top:16px"><button class="button block" type="submit">Send reset link</button></div><p class="muted" data-sent hidden></p></form></div>`;
+};
+forms.forgot = async (f) => {
+  await busy(f.querySelector('button'), async () => {
+    await api.post('/api/auth/forgot', formData(f));
+    const p = f.querySelector('[data-sent]'); p.hidden = false;
+    p.textContent = 'If an account uses that email, a reset link is on its way. It expires in 30 minutes.';
+  });
 };
 forms.signin = async (f) => {
   await busy(f.querySelector('button'), async () => {

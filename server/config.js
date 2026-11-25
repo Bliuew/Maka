@@ -56,6 +56,7 @@ export function assertProductionSafe() {
   if (!config.ageProviderKey) problems.push('AGE_PROVIDER_API_KEY missing');
   if (config.seedSamples) problems.push('SEED_SAMPLES must be 0 in production');
   if (!process.env.DATABASE_URL) problems.push('DATABASE_URL (PostgreSQL) is not set');
+  if (!process.env.MAIL_PROVIDER) problems.push('MAIL_PROVIDER (email for password resets) is not set');
   if (!process.env.S3_BUCKET) problems.push('S3_BUCKET (object storage for media) is not set');
   if (problems.length) {
     throw new Error('Refusing to start in production:\n - ' + problems.join('\n - '));

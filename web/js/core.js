@@ -30,7 +30,7 @@ export async function route() {
   const [name, ...args] = (location.hash.replace(/^#\/?/, '') || 'home').split('/');
   const signedOut = !api.token;
   const needsAge = state.me && state.me.ageStatus !== 'verified';
-  const publicScreens = ['welcome', 'signin', 'signup'];
+  const publicScreens = ['welcome', 'signin', 'signup', 'forgot'];
   const ageScreens = ['verify', 'age-test'];
   let target = name;
   if (signedOut && !publicScreens.includes(name)) target = 'welcome';

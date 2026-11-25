@@ -30,6 +30,12 @@ services:
         generateValue: true
       - key: DEFAULT_TERRITORY
         value: CA
+      - key: MAIL_PROVIDER        # resend or postmark (password-reset email)
+        sync: false
+      - key: MAIL_API_KEY
+        sync: false
+      - key: MAIL_FROM            # e.g. Mäka <no-reply@your-domain>
+        sync: false
       - key: S3_BUCKET
         sync: false
       - key: S3_ENDPOINT

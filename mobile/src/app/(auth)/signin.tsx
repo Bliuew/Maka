@@ -20,6 +20,7 @@ export default function SignIn() {
       <Field label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" autoComplete="email" testID="si-email" />
       <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry autoComplete="current-password" testID="si-pass" onSubmitEditing={submit} />
       <Button title="Sign in" block onPress={submit} testID="si-submit" />
+      <Button title="Forgot password?" variant="ghost" block onPress={() => router.push({ pathname: '/forgot', params: { email } })} testID="si-forgot" />
     </Screen>
   );
 }
