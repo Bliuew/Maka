@@ -27,4 +27,4 @@ export function set(k: string, v: string | null): void {
   } catch { /* storage unavailable */ }
 }
 
-export const KEYS = { token: 'maka_token', device: 'maka_device', server: 'maka_server', pendingUpload: 'maka_pending_upload' };
+export const KEYS = { token: 'maka_token', device: 'maka_device', server: 'maka_server', pendingUpload: 'maka_pending_upload', recentSearches: 'maka_recent_searches' };

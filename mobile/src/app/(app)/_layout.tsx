@@ -11,8 +11,8 @@ export default function AppLayout() {
     }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="p/[id]" options={{ headerShown: false }} />
-      <Stack.Screen name="u/[handle]" options={{ title: '' }} />
-      <Stack.Screen name="profile" options={{ title: '' }} />
+      <Stack.Screen name="u/[handle]" options={{ title: '', headerTransparent: true }} />
+      <Stack.Screen name="profile" options={{ title: '', headerTransparent: true }} />
       <Stack.Screen name="search" options={{ title: 'Search' }} />
       <Stack.Screen name="inbox/index" options={{ title: '' }} />
       <Stack.Screen name="inbox/[id]" options={{ title: 'Conversation' }} />
@@ -20,6 +20,7 @@ export default function AppLayout() {
       <Stack.Screen name="studio" options={{ title: '' }} />
       <Stack.Screen name="settings" options={{ title: 'Settings & safety' }} />
       <Stack.Screen name="admin" options={{ title: '' }} />
+      <Stack.Screen name="collabs" options={{ title: '' }} />
     </Stack>
   );
 }

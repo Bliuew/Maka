@@ -10,8 +10,9 @@ import { useRouter } from 'expo-router';
 import { Text } from './Text';
 import { api, media } from '../lib/client';
 import { count } from '../core/format';
-import { colors, font, type } from '../lib/theme';
-import { Avatar, Icon, type IconName } from './ui';
+import { colors, font, type, words } from '../lib/theme';
+import { Icon, type IconName } from './ui';
+import { Hex, HexAvatar } from './hex';
 import { type Post } from './post';
 import { useSession } from '../lib/session';
 
@@ -54,14 +55,21 @@ function Player({ uri, active, muted, onPausedChange, ref }: { uri: string; acti
   );
 }
 
-function RailButton({ icon, label, text, color, onPress, testID, selected }: { icon: IconName; label: string; text?: string; color?: string; onPress: () => void; testID?: string; selected?: boolean }) {
+function RailButton({ icon, label, text, sub, color, onPress, testID, selected, size = 50 }: { icon: IconName; label: string; text?: string; sub?: string; color?: string; onPress: () => void; testID?: string; selected?: boolean; size?: number }) {
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} accessibilityState={selected === undefined ? undefined : { selected }} testID={testID}
-      style={({ pressed }) => [s.rail, pressed && { transform: [{ scale: 0.88 }] }]} hitSlop={6}>
-      <Icon name={icon} size={33} color={color || '#fff'} style={s.iconShadow} />
+      style={({ pressed }) => [s.rail, pressed && { transform: [{ scale: 0.9 }] }]} hitSlop={4}>
+      <Hex size={size} fill="rgba(27,24,20,0.92)"><Icon name={icon} size={Math.round(size * 0.46)} color={color || colors.gold} /></Hex>
       {text !== undefined ? <Text style={s.railText}>{text}</Text> : null}
+      {sub ? <Text style={s.railSub}>{sub}</Text> : null}
     </Pressable>
   );
+}
+
+/** Caption with hashtags in honey gold. */
+function Caption({ text }: { text: string }) {
+  const parts = text.split(/(#[\p{L}\p{N}_]+)/u);
+  return <Text style={s.caption} numberOfLines={3}>{parts.map((p, i) => (p.startsWith('#') ? <Text key={i} style={{ color: colors.gold }}>{p}</Text> : p))}</Text>;
 }
 
 export default function FeedItem(p: Props) {
@@ -124,31 +132,36 @@ export default function FeedItem(p: Props) {
         <Pressable onPress={() => router.push(`/u/${post.author.handle}`)} accessibilityRole="button" accessibilityLabel={`Open @${post.author.handle}’s profile`} style={{ alignSelf: 'flex-start' }}>
           <Text style={s.handle}>@{post.author.handle}</Text>
         </Pressable>
-        {post.caption ? <Text style={s.caption} numberOfLines={3}>{post.caption}</Text> : null}
+        {post.caption ? <Caption text={post.caption} /> : null}
+        {post.kind === 'video' ? (
+          <View style={s.sound}><Icon name="musical-notes-outline" size={16} color={colors.gold} /><Text style={s.soundText} numberOfLines={1}>Original sound - {post.author.displayName}</Text></View>
+        ) : null}
         <View style={s.chips}>
           {post.isPaidPartnership ? <Text style={s.chip}>Paid partnership</Text> : null}
           {post.author.isSample ? <Text style={s.chip}>Sample account</Text> : null}
           {post.status !== 'published' ? <Text style={s.chip}>{post.status}</Text> : null}
         </View>
-      </View>
-
-      <View style={s.actions}>
-        <View style={s.avatarWrap}>
-          <Pressable onPress={() => router.push(`/u/${post.author.handle}`)} accessibilityRole="button" accessibilityLabel={`Open @${post.author.handle}’s profile`}>
-            <View style={s.avatarRing}><Avatar user={post.author} size={46} /></View>
-          </Pressable>
+        <View style={s.followRow}>
+          <Text style={s.swarm} accessibilityLabel={`${post.author.followers} followers`}><Text style={{ fontFamily: font.bold }}>{count(post.author.followers)}</Text> {words.followers}</Text>
           {mine ? null : (
-            <Pressable style={[s.follow, post.author.isFollowing && s.following]} onPress={() => { tap(); p.onFollow(); }} accessibilityRole="button" hitSlop={8}
-              accessibilityState={{ selected: post.author.isFollowing }} accessibilityLabel={post.author.isFollowing ? `Following @${post.author.handle}` : `Follow @${post.author.handle}`} testID="follow">
-              <Icon name={post.author.isFollowing ? 'checkmark' : 'add'} size={14} color={post.author.isFollowing ? colors.onGold : '#fff'} />
+            <Pressable onPress={() => { tap(); p.onFollow(); }} accessibilityRole="button" testID="follow" accessibilityState={{ selected: post.author.isFollowing }}
+              accessibilityLabel={post.author.isFollowing ? `Following @${post.author.handle}` : `Follow @${post.author.handle}`}
+              style={[s.followBtn, post.author.isFollowing && s.followingBtn]}>
+              <Text style={[s.followText, post.author.isFollowing && { color: colors.text }]}>{post.author.isFollowing ? 'Following' : 'Follow'}</Text>
             </Pressable>
           )}
         </View>
-        <RailButton icon={post.liked ? 'heart' : 'heart-outline'} color={post.liked ? colors.like : '#fff'} selected={post.liked} text={count(post.likes)} label={`Like, ${post.likes} likes`} onPress={like} testID="like" />
-        <RailButton icon="chatbubble-ellipses-outline" text={count(post.comments)} label={`Comments, ${post.comments}`} onPress={p.onComments} testID="comments" />
-        <RailButton icon={post.saved ? 'bookmark' : 'bookmark-outline'} color={post.saved ? colors.gold : '#fff'} selected={post.saved} text="Save" label="Save" onPress={p.onSave} />
-        <RailButton icon="arrow-redo-outline" text="Share" label="Share" onPress={p.onShare} />
-        <RailButton icon="ellipsis-horizontal" label="More options and report" onPress={p.onMore} testID="more" />
+      </View>
+
+      <View style={s.actions}>
+        <Pressable onPress={() => router.push(`/u/${post.author.handle}`)} accessibilityRole="button" accessibilityLabel={`Open @${post.author.handle}’s profile`} style={{ marginBottom: 4 }}>
+          <HexAvatar user={post.author} size={56} ring={false} />
+        </Pressable>
+        <RailButton icon={post.liked ? 'heart' : 'heart-outline'} selected={post.liked} text={count(post.likes)} sub={words.likes} label={`Like, ${post.likes} likes`} onPress={like} testID="like" size={54} />
+        <RailButton icon="chatbubble-outline" text={count(post.comments)} sub={words.comments} label={`Comments, ${post.comments}`} onPress={p.onComments} testID="comments" />
+        <RailButton icon={post.saved ? 'bookmark' : 'bookmark-outline'} selected={post.saved} sub={words.save} label={post.saved ? 'Saved to your Jar' : 'Save to your Jar'} onPress={p.onSave} />
+        <RailButton icon="arrow-redo-outline" sub="Share" label="Share" onPress={p.onShare} />
+        <RailButton icon="ellipsis-horizontal" label="More options and report" onPress={p.onMore} testID="more" size={40} />
       </View>
     </View>
   );
@@ -164,17 +177,20 @@ const s = StyleSheet.create({
   mute: { position: 'absolute', top: 56, right: 16, backgroundColor: 'rgba(0,0,0,0.35)', borderRadius: 18, width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   pause: { position: 'absolute', alignSelf: 'center', top: '42%' },
   heart: { position: 'absolute', alignSelf: 'center', top: '36%' },
-  body: { position: 'absolute', left: 16, right: 92, bottom: 22 },
-  handle: { color: '#fff', fontFamily: font.bold, fontSize: 16, ...shadow },
-  caption: { ...type.body, color: '#fff', marginTop: 6, ...shadow },
+  body: { position: 'absolute', left: 18, right: 92, bottom: 22 },
+  handle: { color: colors.text, fontFamily: font.display, fontSize: 20, letterSpacing: -0.3, ...shadow },
+  caption: { ...type.body, color: colors.text, marginTop: 6, ...shadow },
+  sound: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 },
+  soundText: { color: colors.muted, fontSize: 14, flexShrink: 1, ...shadow },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
-  chip: { ...type.caption, color: '#fff', backgroundColor: 'rgba(255,255,255,0.18)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, overflow: 'hidden' },
-  actions: { position: 'absolute', right: 10, bottom: 20, alignItems: 'center', gap: 16 },
-  avatarWrap: { alignItems: 'center', marginBottom: 6 },
-  avatarRing: { borderWidth: 1.5, borderColor: '#fff', borderRadius: 26, padding: 1 },
-  follow: { position: 'absolute', bottom: -9, width: 22, height: 22, borderRadius: 11, backgroundColor: colors.like, alignItems: 'center', justifyContent: 'center' },
-  following: { backgroundColor: colors.gold },
-  rail: { alignItems: 'center', minWidth: 48, minHeight: 48, justifyContent: 'center' },
-  iconShadow: { textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 6 },
-  railText: { color: '#fff', fontFamily: font.semibold, fontSize: 12, marginTop: 2, ...shadow },
+  chip: { ...type.caption, color: colors.text, backgroundColor: 'rgba(27,24,20,0.8)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, overflow: 'hidden' },
+  followRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 10 },
+  swarm: { color: colors.text, fontSize: 15, ...shadow },
+  followBtn: { backgroundColor: colors.gold, borderRadius: 10, paddingHorizontal: 20, height: 42, justifyContent: 'center' },
+  followingBtn: { backgroundColor: 'rgba(13,11,8,0.6)', borderWidth: 1, borderColor: colors.lineStrong },
+  followText: { color: colors.onGold, fontFamily: font.medium, fontSize: 15 },
+  actions: { position: 'absolute', right: 10, bottom: 24, alignItems: 'center', gap: 10 },
+  rail: { alignItems: 'center', minWidth: 52 },
+  railText: { color: colors.text, fontFamily: font.medium, fontSize: 14, marginTop: 3, ...shadow },
+  railSub: { color: colors.muted, fontSize: 12, ...shadow },
 });

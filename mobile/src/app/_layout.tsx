@@ -3,7 +3,8 @@ import { View } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
+import { useFonts, Figtree_400Regular, Figtree_500Medium, Figtree_600SemiBold, Figtree_700Bold } from '@expo-google-fonts/figtree';
+import { BricolageGrotesque_700Bold, BricolageGrotesque_800ExtraBold } from '@expo-google-fonts/bricolage-grotesque';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { SessionProvider, useSession } from '../lib/session';
@@ -17,8 +18,8 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 /** Strict 19+: keep each person inside the area their account allows. */
 function Gate() {
   const { ready: sessionReady, area } = useSession();
-  // Hold the splash until Inter and the icon font are ready (or failed), so text never flashes in a fallback font.
-  const [fontsLoaded, fontError] = useFonts({ Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, ...Ionicons.font });
+  // Hold the splash until Figtree, Bricolage Grotesque and the icon font are ready (or failed), so text never flashes in a fallback font.
+  const [fontsLoaded, fontError] = useFonts({ Figtree_400Regular, Figtree_500Medium, Figtree_600SemiBold, Figtree_700Bold, BricolageGrotesque_700Bold, BricolageGrotesque_800ExtraBold, ...Ionicons.font });
   const ready = sessionReady && (fontsLoaded || !!fontError);
   const segments = useSegments();
   const router = useRouter();

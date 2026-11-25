@@ -15,6 +15,12 @@ The app uses native modules (`expo-video`, `expo-secure-store` and others), so r
 - `EXPO_PUBLIC_API_URL` sets the server at build time. Without it, the Android emulator uses `http://10.0.2.2:8080`.
 - Test builds can change the server on the welcome screen under **Server settings (test builds)**.
 
+## Design
+
+The app follows the founder's screen designs. The look is a warm near-black background with honey gold (#E3A82F) and cream text. Headings use Bricolage Grotesque and body text uses Figtree. The hexagon motif is drawn with SVG in `src/components/hex.tsx`: hexagon avatars, the honeycomb banner, the comb grid of posts, honey-filled cells, rail and Create buttons. The app also uses its own words: swarm (followers), cells (posts), nectar (likes), replies (comments) and Jar (saves). Screen readers still hear plain words.
+
+Navigation: **Home · Discover · Create · Cinema · Market**. Collabs, Inbox and your profile open from Discover.
+
 ## Screens (`src/app/`, Expo Router)
 
 | Area | Route | Notes |

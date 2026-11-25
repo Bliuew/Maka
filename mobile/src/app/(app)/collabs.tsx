@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Text } from '../../../components/Text';
+import { Text } from '../../components/Text';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { Button, Choice, Icon, Empty, Field, ListItem, Loading, P, Pills, Screen, SectionTitle, Sheet, Tag, useLoad } from '../../../components/ui';
-import { api, media } from '../../../lib/client';
-import { money } from '../../../core/format';
-import { useToast } from '../../../lib/toast';
-import { colors } from '../../../lib/theme';
+import { Button, Choice, Icon, Empty, Field, ListItem, Loading, P, Pills, Screen, SectionTitle, Sheet, Tag, useLoad } from '../../components/ui';
+import { api, media } from '../../lib/client';
+import { money } from '../../core/format';
+import { useToast } from '../../lib/toast';
+import { colors } from '../../lib/theme';
 
 export default function Collabs() {
   const router = useRouter();

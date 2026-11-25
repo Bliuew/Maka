@@ -1,32 +1,37 @@
-// Mäka design tokens: midnight charcoal, honey gold, warm cream.
+// Mäka design tokens, taken from the founder's screen designs:
+// warm near-black, deep honey gold, cream text, hexagon motif.
 
 export const colors = {
-  bg: '#0b0b0d',
-  app: '#0b0b0d',
-  pane: '#151518',        // cards, sheets
-  pane2: '#1d1d21',       // inputs, secondary buttons
-  pane3: '#26262b',       // pressed / selected surfaces
-  line: 'rgba(255,255,255,0.08)',
-  lineStrong: 'rgba(255,255,255,0.14)',
-  gold: '#f6c66f',
-  gold2: '#e0a53f',
-  goldSoft: 'rgba(246,198,111,0.14)',
-  cream: '#fff4dd',
-  muted: '#9e9ba3',
-  faint: '#6d6a72',
-  text: '#f5f3ee',
-  green: '#7fdcae',
-  red: '#ff6b7d',
-  like: '#ff4d67',
-  onGold: '#1a1310',
+  bg: '#0d0b08',
+  app: '#0d0b08',
+  pane: '#1b1814',        // cards, sheets
+  pane2: '#221e19',       // inputs, secondary surfaces
+  pane3: '#2b2620',       // pressed / selected
+  line: '#2c2822',
+  lineStrong: '#3a352d',
+  gold: '#e3a82f',
+  gold2: '#c3922f',
+  goldSoft: 'rgba(227,168,47,0.14)',
+  honeyTop: '#d6c597',    // honey-cell gradient (top)
+  honeyBottom: '#c4922e', // honey-cell gradient (bottom)
+  cream: '#f4ead5',
+  text: '#f4ead5',
+  muted: '#a99f8c',
+  faint: '#6e665a',
+  green: '#8fd3a6',
+  red: '#ef7d6b',
+  like: '#e3a82f',        // nectar is honey-coloured
+  onGold: '#1a140a',
 };
 
-/** Inter, loaded in the root layout. Weight → font file (Android ignores fontWeight for custom fonts). */
+/** Figtree for text, Bricolage Grotesque for display headings (loaded in the root layout). */
 export const font = {
-  regular: 'Inter_400Regular',
-  medium: 'Inter_500Medium',
-  semibold: 'Inter_600SemiBold',
-  bold: 'Inter_700Bold',
+  regular: 'Figtree_400Regular',
+  medium: 'Figtree_500Medium',
+  semibold: 'Figtree_600SemiBold',
+  bold: 'Figtree_700Bold',
+  display: 'BricolageGrotesque_800ExtraBold',
+  displayBold: 'BricolageGrotesque_700Bold',
 };
 
 export function familyFor(weight?: string | number): string {
@@ -39,18 +44,21 @@ export function familyFor(weight?: string | number): string {
 
 /** Type scale. */
 export const type = {
-  largeTitle: { fontFamily: font.bold, fontSize: 30, lineHeight: 36, letterSpacing: -0.6 },
-  title: { fontFamily: font.bold, fontSize: 22, lineHeight: 28, letterSpacing: -0.3 },
-  headline: { fontFamily: font.semibold, fontSize: 17, lineHeight: 22, letterSpacing: -0.2 },
-  body: { fontFamily: font.regular, fontSize: 15, lineHeight: 21 },
-  bodyStrong: { fontFamily: font.semibold, fontSize: 15, lineHeight: 21 },
-  callout: { fontFamily: font.regular, fontSize: 14, lineHeight: 19 },
+  largeTitle: { fontFamily: font.display, fontSize: 36, lineHeight: 42, letterSpacing: -1 },
+  title: { fontFamily: font.display, fontSize: 26, lineHeight: 31, letterSpacing: -0.6 },
+  headline: { fontFamily: font.displayBold, fontSize: 19, lineHeight: 24, letterSpacing: -0.3 },
+  body: { fontFamily: font.regular, fontSize: 16, lineHeight: 23 },
+  bodyStrong: { fontFamily: font.semibold, fontSize: 16, lineHeight: 22 },
+  callout: { fontFamily: font.regular, fontSize: 14, lineHeight: 20 },
   caption: { fontFamily: font.medium, fontSize: 12, lineHeight: 16 },
-  overline: { fontFamily: font.semibold, fontSize: 11, lineHeight: 14, letterSpacing: 0.6, textTransform: 'uppercase' as const },
+  overline: { fontFamily: font.medium, fontSize: 12, lineHeight: 16, letterSpacing: 1.4, textTransform: 'uppercase' as const, color: '#a99f8c' },
 };
 
-export const radius = { sm: 8, md: 12, lg: 16, xl: 22, pill: 999 };
+export const radius = { sm: 8, md: 10, lg: 14, xl: 22, pill: 999 };
 export const space = (n: number) => n * 4;
 
 export const TAGLINE = 'Feel The Power Of Love Within You';
 export const BRAND = 'Mäka';
+
+/** Mäka's words for social actions (screen readers still get plain words). */
+export const words = { followers: 'swarm', posts: 'cells', likes: 'nectar', comments: 'replies', save: 'Jar' };

@@ -1,17 +1,17 @@
 import React, { useState } from 'react';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Text } from './Text';
-import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { Avatar, Button, Field, Icon, Loading, Metrics, P, Row, Screen, Sheet, Tag, useLoad } from './ui';
+import { Button, Empty, Field, Icon, Loading, Overline, P, Screen, Sheet, Tag, useLoad, type IconName } from './ui';
+import { CombGrid, HexAvatar, Honeycomb } from './hex';
 import { ReportSheet } from './post';
 import { api, media } from '../lib/client';
 import { count } from '../core/format';
 import { useSession } from '../lib/session';
 import { useToast } from '../lib/toast';
 import { uploadAsset, waitForMedia } from '../lib/uploads';
-import { colors } from '../lib/theme';
+import { colors, font, type, words } from '../lib/theme';
 
 export default function ProfileView({ userKey }: { userKey: string }) {
   const router = useRouter();
@@ -19,11 +19,14 @@ export default function ProfileView({ userKey }: { userKey: string }) {
   const { me, setMe } = useSession();
   const { data, error, reload, refreshing, setData } = useLoad(() => api.get('/api/users/' + encodeURIComponent(userKey)), [userKey]);
   const [more, setMore] = useState(false);
-  const [tab, setTab] = useState<'posts' | 'saved'>('posts');
+  const { width } = useWindowDimensions();
+  const [tab, setTab] = useState<'posts' | 'saved' | 'portfolio'>('posts');
   const [saved, setSaved] = useState<any[] | null>(null);
-  const openTab = (t: 'posts' | 'saved') => {
+  const [portfolio, setPortfolio] = useState<any[] | null>(null);
+  const openTab = (t: 'posts' | 'saved' | 'portfolio') => {
     setTab(t);
     if (t === 'saved') api.get<any[]>('/api/me/saved').then(setSaved).catch(toast.error);
+    if (t === 'portfolio') api.get<any[]>('/api/me/applications').then(setPortfolio).catch(toast.error);
   };
   const [report, setReport] = useState(false);
   const [edit, setEdit] = useState(false);
@@ -59,64 +62,88 @@ export default function ProfileView({ userKey }: { userKey: string }) {
     if (!r.canceled && r.assets[0]) setAvatar({ uri: r.assets[0].uri, file: (r.assets[0] as any).file });
   });
 
+  const tabs: { key: 'posts' | 'saved' | 'portfolio'; label: string; icon?: IconName }[] = own
+    ? [{ key: 'posts', label: 'Cells' }, { key: 'saved', label: 'Saved', icon: 'bookmark-outline' }, { key: 'portfolio', label: 'Portfolio' }]
+    : [{ key: 'posts', label: 'Cells' }];
+  const stat = (n: number, label: string, a11y: string) => (
+    <View accessible accessibilityLabel={`${n} ${a11y}`}><Text style={s.statN}>{count(n)}</Text><Text style={s.statL}>{label}</Text></View>
+  );
+  const pad = width - 40;
   return (
     <Screen onRefresh={() => reload(true)} refreshing={refreshing}>
-      {/* Instagram-style header: avatar beside the counts, then name, bio and actions. */}
-      <Row style={{ marginTop: 14, gap: 18 }}>
-        <Avatar user={u} size={84} ring={own} />
-        <View style={{ flex: 1 }}><Metrics items={[[count(u.posts), 'Posts'], [count(u.followers), 'Followers'], [count(u.following), 'Following']]} /></View>
-      </Row>
+      <View style={{ marginHorizontal: -20, height: 170 }}>
+        <Honeycomb width={width} height={170} />
+      </View>
+      <View style={{ marginTop: -62 }}><HexAvatar user={u} size={118} /></View>
       <Text style={s.name} accessibilityRole="header">{u.displayName}</Text>
-      <Text style={{ color: colors.muted, fontSize: 14 }}>@{u.handle}</Text>
+      <Text style={s.handle}>@{u.handle}</Text>
       {u.bio ? <Text style={s.bio}>{u.bio}</Text> : null}
-      <Row wrap>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
         {u.isSample ? <Tag tone="grey">Sample account</Tag> : null}
         {data.banned ? <Tag tone="red">Account removed</Tag> : null}
         {own ? <Tag tone="green">19+ verified</Tag> : u.followsYou ? <Tag tone="grey">Follows you</Tag> : null}
-      </Row>
-      <Row style={{ marginTop: 2, alignItems: 'flex-end' }}>
+      </View>
+      <View style={s.stats}>
+        {stat(u.followers, words.followers, 'followers')}
+        {stat(u.following, 'following', 'following')}
+        {stat(u.posts, words.posts, 'posts')}
+      </View>
+      <View style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-end' }}>
         {own ? (
           <>
-            <View style={{ flex: 1 }}><Button title="Edit profile" variant="secondary" small block onPress={() => { setName(u.displayName); setBio(u.bio); setAvatar(null); setEdit(true); }} /></View>
-            <View style={{ flex: 1 }}><Button title="Studio" variant="secondary" small block onPress={() => router.push('/studio')} /></View>
-            {me?.role === 'admin' ? <View style={{ marginTop: 14 }}><Button title="" icon="shield-checkmark-outline" label="Trust and Safety" variant="secondary" small onPress={() => router.push('/admin')} /></View> : null}
-            <View style={{ marginTop: 14 }}><Button title="" icon="settings-outline" label="Settings and safety" variant="secondary" small onPress={() => router.push('/settings')} testID="open-settings" /></View>
+            <View style={{ flex: 1 }}><Button title="Edit profile" block onPress={() => { setName(u.displayName); setBio(u.bio); setAvatar(null); setEdit(true); }} /></View>
+            <View style={{ flex: 1 }}><Button title="Studio" variant="secondary" block onPress={() => router.push('/studio')} /></View>
+            {me?.role === 'admin' ? <Button title="" icon="shield-checkmark-outline" label="Trust and Safety" variant="secondary" onPress={() => router.push('/admin')} /> : null}
+            <Button title="" icon="settings-outline" label="Settings and safety" variant="secondary" onPress={() => router.push('/settings')} testID="open-settings" />
           </>
         ) : u.isBlocked ? (
-          <View style={{ flex: 1 }}><Button title="Unblock" variant="secondary" small block onPress={act(async () => { await api.del(`/api/users/${u.id}/block`); toast.show('Unblocked'); reload(); })} /></View>
+          <View style={{ flex: 1 }}><Button title="Unblock" variant="secondary" block onPress={act(async () => { await api.del(`/api/users/${u.id}/block`); toast.show('Unblocked'); reload(); })} /></View>
         ) : (
           <>
-            <View style={{ flex: 1 }}><Button title={u.isFollowing ? 'Following' : 'Follow'} variant={u.isFollowing ? 'secondary' : 'primary'} small block onPress={follow} label={u.isFollowing ? `Unfollow @${u.handle}` : `Follow @${u.handle}`} /></View>
-            <View style={{ flex: 1 }}><Button title="Message" variant="secondary" small block onPress={act(async () => { const r = await api.post('/api/conversations', { memberIds: [u.id] }); router.push(`/inbox/${r.id}`); })} /></View>
-            <View style={{ marginTop: 14 }}><Button title="" icon="ellipsis-horizontal" variant="secondary" small label="More options" onPress={() => setMore(true)} testID="user-more" /></View>
+            <View style={{ flex: 1 }}><Button title={u.isFollowing ? 'Following' : 'Follow'} variant={u.isFollowing ? 'secondary' : 'primary'} block onPress={follow} label={u.isFollowing ? `Unfollow @${u.handle}` : `Follow @${u.handle}`} /></View>
+            <View style={{ flex: 1 }}><Button title="Message" variant="secondary" block onPress={act(async () => { const r = await api.post('/api/conversations', { memberIds: [u.id] }); router.push(`/inbox/${r.id}`); })} /></View>
+            <Button title="" icon="ellipsis-horizontal" variant="secondary" label="More options" onPress={() => setMore(true)} testID="user-more" />
           </>
         )}
-      </Row>
+      </View>
 
-      <View style={s.gridTabs} accessibilityRole="tablist">
-        {(own ? (['posts', 'saved'] as const) : (['posts'] as const)).map((t) => (
-          <Pressable key={t} style={[s.gridTab, tab === t && s.gridTabOn]} onPress={() => openTab(t)} accessibilityRole="tab"
-            accessibilityState={{ selected: tab === t }} accessibilityLabel={t === 'posts' ? 'Posts' : 'Saved'}>
-            <Icon name={t === 'posts' ? (tab === t ? 'grid' : 'grid-outline') : (tab === t ? 'bookmark' : 'bookmark-outline')} size={22} color={tab === t ? colors.text : colors.faint} />
+      <View style={s.tabs} accessibilityRole="tablist">
+        {tabs.map((t) => (
+          <Pressable key={t.key} style={s.tab} onPress={() => openTab(t.key)} accessibilityRole="tab" accessibilityState={{ selected: tab === t.key }} accessibilityLabel={t.label}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              {t.icon ? <Icon name={t.icon} size={18} color={tab === t.key ? colors.gold : colors.muted} /> : null}
+              <Text style={[s.tabText, tab === t.key && { color: colors.gold }]}>{t.label}</Text>
+            </View>
+            <View style={[s.tabBar, tab !== t.key && { opacity: 0 }]} />
           </Pressable>
         ))}
       </View>
-      {u.isBlocked ? <P muted>You blocked this account.</P> : shown.length ? (
-        <View style={s.grid}>
-          {shown.map((p: any) => (
-            <Pressable key={p.id} style={s.thumb} onPress={() => router.push(`/p/${p.id}`)} accessibilityRole="button" accessibilityLabel={`Open post: ${p.caption.slice(0, 60) || 'Untitled'}. ${p.views} views`} testID="thumb">
-              {media(p.posterUrl) ? <Image source={{ uri: media(p.posterUrl)! }} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
-              {p.status !== 'published' ? <Text style={s.badge}>{p.status}</Text> : null}
-              <View style={s.viewsRow}><Icon name="play" size={12} color="#fff" /><Text style={s.views}>{count(p.views)}</Text></View>
-            </Pressable>
-          ))}
-        </View>
+
+      {u.isBlocked ? <P muted>You blocked this account.</P> : tab === 'portfolio' ? (
+        <>
+          <Overline>Collaborations</Overline>
+          {portfolio?.length ? portfolio.map((a: any) => (
+            <View key={a.id} style={s.portfolioRow}>
+              <Text style={{ color: colors.text, fontSize: 16, flex: 1 }} numberOfLines={1}>{a.title}</Text>
+              <Text style={{ color: colors.muted }}>{a.contract ? `contract ${a.contract.status}` : a.status}</Text>
+            </View>
+          )) : <Empty icon="briefcase-outline">Your collaboration work will appear here.</Empty>}
+        </>
       ) : (
-        <View style={s.emptyGrid}>
-          <Icon name={tab === 'saved' ? 'bookmark-outline' : 'camera-outline'} size={40} color={colors.faint} />
-          <Text style={{ color: colors.muted, marginTop: 10, marginBottom: 14 }}>{tab === 'saved' ? 'Nothing saved yet' : own ? 'Share your first video' : 'No posts yet'}</Text>
-          {own && tab === 'posts' ? <Button title="Create your first post" onPress={() => router.navigate('/create')} /> : null}
-        </View>
+        <>
+          <Overline>{tab === 'saved' ? 'Saved to your jar' : own ? 'Your comb grows one cell per piece' : `${u.displayName}’s comb`}</Overline>
+          {shown.length ? (
+            <CombGrid width={pad} items={shown.map((p: any) => ({ ...p, cover: media(p.posterUrl) }))}
+              onPress={(p: any) => router.push(`/p/${p.id}`)} label={(p: any) => `Open post: ${p.caption.slice(0, 60) || 'Untitled'}. ${p.views} views`}
+              emptyCells={Math.max(0, 9 - shown.length)} />
+          ) : (
+            <View style={{ alignItems: 'center' }}>
+              <CombGrid width={pad} items={[]} onPress={() => {}} label={() => ''} emptyCells={6} />
+              <Text style={{ color: colors.muted, marginTop: 14, marginBottom: 12 }}>{tab === 'saved' ? 'Nothing saved yet' : own ? 'Share your first cell' : 'No cells yet'}</Text>
+              {own && tab === 'posts' ? <Button title="Create your first post" onPress={() => router.navigate('/create')} /> : null}
+            </View>
+          )}
+        </>
       )}
       <Sheet visible={more} title={'@' + u.handle} onClose={() => setMore(false)}>
         <Button title="Report account" icon="flag-outline" variant="secondary" block onPress={() => setReport(true)} testID="report-account" />
@@ -138,15 +165,15 @@ export default function ProfileView({ userKey }: { userKey: string }) {
 }
 
 const s = StyleSheet.create({
-  name: { color: colors.text, fontSize: 16, fontWeight: '700', marginTop: 12 },
-  bio: { color: colors.text, fontSize: 14, lineHeight: 19, marginTop: 6 },
-  gridTabs: { flexDirection: 'row', marginTop: 18, marginHorizontal: -16, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
-  gridTab: { flex: 1, alignItems: 'center', paddingVertical: 11, borderBottomWidth: 1.5, borderBottomColor: 'transparent' },
-  gridTabOn: { borderBottomColor: colors.text },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 2, marginHorizontal: -16 },
-  thumb: { width: '33%', flexGrow: 1, maxWidth: '33.4%', aspectRatio: 9 / 16, backgroundColor: colors.pane2, overflow: 'hidden', justifyContent: 'flex-end' },
-  viewsRow: { flexDirection: 'row', alignItems: 'center', gap: 3, padding: 6 },
-  views: { color: '#fff', fontWeight: '600', fontSize: 12, textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 4 },
-  badge: { position: 'absolute', top: 6, left: 6, color: colors.onGold, backgroundColor: colors.gold, borderRadius: 6, paddingHorizontal: 6, fontSize: 11, fontWeight: '700', overflow: 'hidden' },
-  emptyGrid: { alignItems: 'center', paddingVertical: 48 },
+  name: { ...type.largeTitle, fontSize: 38, lineHeight: 44, marginTop: 14 },
+  handle: { color: colors.muted, fontSize: 16, marginTop: 2 },
+  bio: { color: colors.text, fontSize: 16, lineHeight: 23, marginTop: 14 },
+  stats: { flexDirection: 'row', gap: 40, marginTop: 20, marginBottom: 20 },
+  statN: { fontFamily: font.display, fontSize: 22, color: colors.text },
+  statL: { color: colors.muted, fontSize: 15, marginTop: 2 },
+  tabs: { flexDirection: 'row', marginTop: 26, marginHorizontal: -20, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineStrong },
+  tab: { flex: 1, alignItems: 'center', paddingTop: 12 },
+  tabText: { color: colors.muted, fontSize: 16, fontFamily: font.medium },
+  tabBar: { width: 46, height: 4, borderRadius: 2, backgroundColor: colors.gold, marginTop: 12, shadowColor: colors.gold, shadowOpacity: 0.7, shadowRadius: 6 },
+  portfolioRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineStrong },
 });

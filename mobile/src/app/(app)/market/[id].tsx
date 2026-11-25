@@ -7,24 +7,25 @@ import { Banner, Button, Icon, Loading, P, Row, Screen, Sheet, Tag, useLoad } fr
 import { api, media } from '../../../lib/client';
 import { money } from '../../../core/format';
 import { useToast } from '../../../lib/toast';
+import { cart, useBag } from '../../../lib/cart';
 import { colors } from '../../../lib/theme';
 
 export default function Storefront() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const toast = useToast();
   const { data, error, reload } = useLoad(() => api.get('/api/market/businesses/' + id), [id]);
-  const [cart, setCart] = useState<Record<string, number>>({});
+  const basket = useBag(id);
   const [bag, setBag] = useState(false);
   const [result, setResult] = useState<{ order: any; message: string } | null>(null);
   if (!data) return <Loading error={error} onRetry={reload} />;
   const products = Object.fromEntries(data.products.map((p: any) => [p.id, p]));
-  const items = Object.values(cart).reduce((a, n) => a + n, 0);
-  const lines = Object.entries(cart).map(([pid, qty]) => ({ p: products[pid], qty }));
+  const items = Object.values(basket).reduce((a, n) => a + n, 0);
+  const lines = Object.entries(basket).map(([pid, qty]) => ({ p: products[pid], qty }));
   const total = lines.reduce((a, l) => a + l.p.priceCents * l.qty, 0);
   const place = async () => {
     try {
-      const o = await api.post('/api/orders', { businessId: id, items: Object.entries(cart).map(([productId, qty]) => ({ productId, qty })) });
-      setCart({});
+      const o = await api.post('/api/orders', { businessId: id, items: Object.entries(basket).map(([productId, qty]) => ({ productId, qty })) });
+      cart.clear(id);
       try { await api.post(`/api/orders/${o.orderId}/checkout`); }
       catch (e: any) { setResult({ order: o, message: e.message }); }
     } catch (e) { toast.error(e); }
@@ -41,7 +42,7 @@ export default function Storefront() {
               <Text style={{ color: colors.muted, fontSize: 12 }} numberOfLines={2}>{p.description}</Text>
               <Row style={{ justifyContent: 'space-between', marginTop: 6 }}>
                 <Text style={{ color: colors.text, fontWeight: '800' }}>{money(p.priceCents, p.currency)}</Text>
-                {p.inStock ? <Button title="Add" small label={`Add ${p.name} to bag`} onPress={() => { setCart({ ...cart, [p.id]: (cart[p.id] || 0) + 1 }); toast.show('Added to bag'); }} testID="add-cart" /> : <Tag tone="grey">Sold out</Tag>}
+                {p.inStock ? <Button title="Add" small label={`Add ${p.name} to bag`} onPress={() => { cart.add(id, p.id); toast.show('Added to bag'); }} testID="add-cart" /> : <Tag tone="grey">Sold out</Tag>}
               </Row>
             </View>
           </View>

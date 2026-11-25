@@ -406,6 +406,30 @@ export function registerSocial(r, ctx) {
     };
   });
 
+  // ---------------- discover ----------------
+  // Emerging creators are the newest verified creators with at least one post.
+  // Follower counts are never used to pick or order them.
+  r.get('/api/discover', {}, async ({ user }) => {
+    const creators = await q.all(`SELECT u.* FROM users u
+      WHERE u.status IN ('active','restricted') AND u.age_status='verified' AND u.role='user' AND u.id<>?
+      AND EXISTS (SELECT 1 FROM posts p WHERE p.author_id=u.id AND p.status='published')
+      AND u.id NOT IN (SELECT blocker_id FROM blocks WHERE blocked_id=?) AND u.id NOT IN (SELECT blocked_id FROM blocks WHERE blocker_id=?)
+      ORDER BY u.created_at DESC LIMIT 12`, user.id, user.id, user.id);
+    const since = now() - 14 * 864e5;
+    const captions = await q.all("SELECT caption FROM posts WHERE status='published' AND published_at>? LIMIT 5000", since);
+    const tags = new Map();
+    for (const { caption } of captions) for (const t of new Set((caption.match(/#[\p{L}\p{N}_]+/gu) || []).map((x) => x.toLowerCase()))) tags.set(t, (tags.get(t) || 0) + 1);
+    const hashtags = [...tags.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([tag, posts]) => ({ tag, posts }));
+    const campaigns = await q.all(`SELECT c.id, c.title, c.category, c.compensation_cents, c.currency, c.is_sample, b.name business FROM campaigns c
+      JOIN businesses b ON b.id=c.business_id WHERE c.status='open' AND b.verification='verified' ORDER BY c.created_at DESC LIMIT 6`);
+    return {
+      creators: await mapAsync(creators, (u) => ctx.publicUser(u, user.id)),
+      hashtags,
+      campaigns: campaigns.map((c) => ({ id: c.id, title: c.title, category: c.category, business: c.business, compensationCents: c.compensation_cents, currency: c.currency, isSample: !!c.is_sample })),
+      eligibility: 'Every verified creator can apply to campaigns. There is no follower minimum.',
+    };
+  });
+
   // ---------------- creator studio ----------------
   r.get('/api/studio', {}, async ({ user }) => {
     const posts = await ctx.serializePosts(await q.all("SELECT * FROM posts WHERE author_id=? AND status!='removed' ORDER BY created_at DESC", user.id), user.id);

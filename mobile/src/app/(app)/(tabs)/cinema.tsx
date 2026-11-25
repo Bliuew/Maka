@@ -3,10 +3,11 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Text } from '../../../components/Text';
 import { Image } from 'expo-image';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { Banner, Button, Empty, Icon, Loading, P, Pills, Row, Screen, SectionTitle, Sheet, useLoad } from '../../../components/ui';
+import { Banner, Button, Empty, Loading, P, Pills, Row, Screen, SectionTitle, Sheet, useLoad } from '../../../components/ui';
+import PosterArt from '../../../components/PosterArt';
 import { api, media } from '../../../lib/client';
 import { useToast } from '../../../lib/toast';
-import { colors } from '../../../lib/theme';
+import { colors, font, type } from '../../../lib/theme';
 
 type Title = any;
 
@@ -36,24 +37,48 @@ export default function Cinema() {
   const poster = (t: Title) => (
     <Pressable key={t.id} style={s.poster} onPress={() => openTitle(t.id)} accessibilityRole="button"
       accessibilityLabel={`${t.name}. ${t.genres.join(', ')}. ${t.availability.playable ? 'Free with ads' : t.isPlaceholder ? 'Placeholder, cannot play' : 'Unavailable'}`} testID="poster">
-      {media(t.posterUrl) ? <Image source={{ uri: media(t.posterUrl)! }} style={StyleSheet.absoluteFill} contentFit="cover" /> : <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}><Icon name="film-outline" size={34} color={colors.faint} /></View>}
-      <View style={s.posterTxt}><Text style={s.posterName}>{t.name}</Text>
-        <Text style={s.posterSub}>{t.genres.join(' · ')} · {t.availability.playable ? 'Free with ads' : t.isPlaceholder ? 'Placeholder' : 'Unavailable'}</Text></View>
+      <View style={StyleSheet.absoluteFill} onLayout={undefined}>
+        {media(t.posterUrl) ? <Image source={{ uri: media(t.posterUrl)! }} style={StyleSheet.absoluteFill} contentFit="cover" /> : <PosterArt id={t.id} width={160} height={240} />}
+      </View>
+      <View style={s.posterTxt}><Text style={s.posterName} numberOfLines={2}>{t.name}</Text></View>
     </Pressable>
   );
+  const kindLabel = (k: string) => ({ movie: 'Feature film', series: 'Series', documentary: 'Documentary' }[k] || k);
   return (
-    <Screen title="Cinema" intro={`Free with ads in ${data.territory}`} onRefresh={() => reload(true)} refreshing={refreshing}>
+    <Screen eyebrow="Free to watch" title="Cinema" onRefresh={() => reload(true)} refreshing={refreshing}>
+      {hero && !f.list ? (
+        <View style={s.feature}>
+          <View style={s.featureArt}>
+            {media(hero.posterUrl) ? <Image source={{ uri: media(hero.posterUrl)! }} style={StyleSheet.absoluteFill} contentFit="cover" /> : <PosterArt id={hero.id} width={400} height={260} />}
+            {hero.isPlaceholder ? <View style={s.sampleTag}><Text style={s.sampleText}>Sample</Text></View> : null}
+            <View style={s.featureTitleWrap}>
+              <Text style={s.featureKind}>{kindLabel(hero.kind)}</Text>
+              <Text style={s.featureTitle} numberOfLines={2}>{hero.name}</Text>
+            </View>
+          </View>
+          <View style={s.featureBody}>
+            <Text style={s.featureInfo}>{hero.availability.playable ? `Free with ads in ${data.territory}.` : hero.isPlaceholder ? 'Placeholder title. No film has been licensed yet, so it can’t be played.' : hero.availability.message}</Text>
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <View style={{ flex: 1 }}><Button title={hero.availability.playable ? 'Play free' : 'Not available'} icon={hero.availability.playable ? 'play' : undefined} block disabled={!hero.availability.playable} onPress={() => openTitle(hero.id)} /></View>
+              <View style={{ flex: 1 }}><Button title="Details" variant="secondary" block onPress={() => openTitle(hero.id)} /></View>
+            </View>
+          </View>
+        </View>
+      ) : null}
+      {data.continueWatching.length ? (
+        <>
+          <SectionTitle>Continue watching</SectionTitle>
+          {data.continueWatching.map((t: Title) => (
+            <Pressable key={t.id} style={s.cw} onPress={() => openTitle(t.id)} accessibilityRole="button" accessibilityLabel={`Continue ${t.name}`}>
+              <View style={{ width: 100 }}>{poster(t)}</View>
+              <Text style={s.cwName}>{t.name}</Text>
+            </Pressable>
+          ))}
+        </>
+      ) : null}
       <Pills label="Type" value={f.list ? 'watchlist' : f.kind} onChange={(v) => setF(v === 'watchlist' ? { ...f, list: f.list ? '' : 'watchlist' } : { ...f, kind: v, list: '' })}
         options={[{ value: '', label: 'All' }, { value: 'movie', label: 'Movies' }, { value: 'series', label: 'Series' }, { value: 'documentary', label: 'Documentaries' }, { value: 'watchlist', label: 'My List' }]} />
       <Pills label="Genre" value={f.genre} onChange={(v) => setF({ ...f, genre: v })} options={[{ value: '', label: 'Any genre' }, ...data.genres.map((g: string) => ({ value: g, label: g }))]} />
-      {data.licensedCount === 0 ? <Banner>No films are licensed yet. These are placeholder titles and can’t be played.</Banner> : null}
-      {hero && !f.list ? (
-        <Pressable style={s.hero} onPress={() => openTitle(hero.id)} accessibilityRole="button" accessibilityLabel={`Featured: ${hero.name}. View details`}>
-          {media(hero.posterUrl) ? <Image source={{ uri: media(hero.posterUrl)! }} style={StyleSheet.absoluteFill} contentFit="cover" /> : <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}><Icon name="film-outline" size={44} color={colors.faint} /></View>}
-          <View style={s.heroTxt}><Text style={s.badge}>{hero.isPlaceholder ? 'Fictional placeholder' : 'Featured'}</Text><Text style={s.heroName}>{hero.name}</Text><Text style={s.posterSub}>{hero.genres.join(' · ')}</Text></View>
-        </Pressable>
-      ) : null}
-      {data.continueWatching.length ? <><SectionTitle>Continue watching</SectionTitle><View style={s.grid}>{data.continueWatching.map(poster)}</View></> : null}
       <SectionTitle>{f.list ? 'My List' : 'Browse'}</SectionTitle>
       <View style={s.grid}>{data.items.length ? data.items.map(poster) : <Empty>Nothing here yet.</Empty>}</View>
       <Sheet visible={!!open} title={open?.name || ''} onClose={() => { setOpen(null); setStream(null); }}>
@@ -64,7 +89,7 @@ export default function Cinema() {
             <P>{open.synopsis}</P>
             {open.availability.playable ? null : <Banner>{open.availability.message}</Banner>}
             <Row wrap>
-              <Button title={open.availability.playable ? 'Watch free' : 'Not available'} icon="play" disabled={!open.availability.playable} onPress={play} testID="play-title" />
+              <Button title={open.availability.playable ? 'Watch free' : 'Not available'} icon={open.availability.playable ? 'play' : undefined} disabled={!open.availability.playable} onPress={play} testID="play-title" />
               <Button title={open.inWatchlist ? 'In My List' : 'My List'} icon={open.inWatchlist ? 'checkmark' : 'add'} variant="secondary" onPress={watchlist} testID="watchlist" />
             </Row>
           </>
@@ -76,12 +101,18 @@ export default function Cinema() {
 
 const s = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  poster: { width: '48%', aspectRatio: 2 / 3, borderRadius: 14, overflow: 'hidden', backgroundColor: colors.pane2, justifyContent: 'flex-end' },
-  posterTxt: { padding: 10, backgroundColor: 'rgba(0,0,0,0.55)' },
-  posterName: { color: '#fff', fontWeight: '800' },
-  posterSub: { color: colors.cream, fontSize: 12, marginTop: 2 },
-  hero: { height: 200, borderRadius: 18, overflow: 'hidden', marginVertical: 10, justifyContent: 'flex-end', backgroundColor: colors.pane2 },
-  heroTxt: { padding: 14, backgroundColor: 'rgba(0,0,0,0.5)' },
-  heroName: { color: '#fff', fontSize: 22, fontWeight: '900', marginTop: 4 },
-  badge: { color: colors.onGold, backgroundColor: colors.gold, alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, fontWeight: '800', fontSize: 12, overflow: 'hidden' },
+  poster: { width: '48%', aspectRatio: 2 / 3, borderRadius: 12, overflow: 'hidden', backgroundColor: colors.pane2, justifyContent: 'flex-end', borderWidth: 1, borderColor: colors.line },
+  posterTxt: { padding: 10, backgroundColor: 'rgba(13,11,8,0.72)' },
+  posterName: { color: colors.text, fontFamily: font.displayBold, fontSize: 16, lineHeight: 19 },
+  feature: { marginTop: 14, borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: colors.line, backgroundColor: colors.pane },
+  featureArt: { height: 260, overflow: 'hidden', justifyContent: 'flex-end' },
+  sampleTag: { position: 'absolute', top: 14, left: 14, backgroundColor: 'rgba(13,11,8,0.8)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
+  sampleText: { color: colors.text, fontSize: 13 },
+  featureTitleWrap: { position: 'absolute', left: 20, right: 20, bottom: 14 },
+  featureKind: { ...type.overline, color: colors.cream },
+  featureTitle: { fontFamily: font.display, fontSize: 38, lineHeight: 42, letterSpacing: -1, color: '#efdcaa' },
+  featureBody: { padding: 20, gap: 16 },
+  featureInfo: { color: colors.muted, fontSize: 15, lineHeight: 21 },
+  cw: { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 12 },
+  cwName: { color: colors.text, fontSize: 16 },
 });

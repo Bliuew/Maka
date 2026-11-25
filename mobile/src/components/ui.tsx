@@ -42,13 +42,14 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[] = []) {
 }
 
 // ---------- layout ----------
-export function Screen({ children, title, intro, onRefresh, refreshing, scroll = true, right, style }: {
+export function Screen({ children, title, eyebrow, intro, onRefresh, refreshing, scroll = true, right, style }: {
   children: React.ReactNode; title?: string; eyebrow?: string; intro?: string; onRefresh?: () => void; refreshing?: boolean;
   scroll?: boolean; right?: React.ReactNode; style?: StyleProp<ViewStyle>;
 }) {
   const head = title ? (
     <View style={styles.pagehead}>
       <View style={{ flex: 1 }}>
+        {eyebrow ? <Text style={[type.overline, { marginBottom: 6 }]}>{eyebrow}</Text> : null}
         <Text style={type.largeTitle} accessibilityRole="header">{title}</Text>
         {intro ? <Text style={[type.callout, { color: colors.muted, marginTop: 6 }]}>{intro}</Text> : null}
       </View>
@@ -100,6 +101,10 @@ export function Loading({ error, onRetry }: { error?: string | null; onRetry?: (
 
 export const SectionTitle = ({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) => (
   <View style={styles.sectionRow}><Text style={type.headline} accessibilityRole="header">{children}</Text>{right}</View>
+);
+/** Uppercase, letter-spaced section label (e.g. EMERGING CREATORS). */
+export const Overline = ({ children, right, style }: { children: React.ReactNode; right?: React.ReactNode; style?: any }) => (
+  <View style={[styles.sectionRow, style]}><Text style={type.overline} accessibilityRole="header">{children}</Text>{right}</View>
 );
 export const P = ({ children, muted, style }: { children: React.ReactNode; muted?: boolean; style?: any }) => (
   <Text style={[type.body, { marginVertical: 4 }, muted && { color: colors.muted, ...type.callout }, style]}>{children}</Text>
@@ -287,12 +292,12 @@ export function Sheet({ visible, title, onClose, children, footer }: { visible: 
   );
 }
 
-export function SearchBox({ value, onChange, placeholder = 'Search businesses and products', label = 'Search marketplace' }: { value: string; onChange: (v: string) => void; placeholder?: string; label?: string }) {
+export function SearchBox({ value, onChange, placeholder = 'Search businesses and products', label = 'Search marketplace', testID = 'search-input' }: { value: string; onChange: (v: string) => void; placeholder?: string; label?: string; testID?: string }) {
   return (
     <View style={styles.search}>
       <Icon name="search" size={18} color={colors.faint} />
       <TextInput value={value} onChangeText={onChange} placeholder={placeholder} placeholderTextColor={colors.faint} accessibilityLabel={label}
-        style={[type.body, { flex: 1, paddingVertical: 10, color: colors.text }]} autoCapitalize="none" autoCorrect={false} testID="search-input" />
+        style={[type.body, { flex: 1, paddingVertical: 10, color: colors.text }]} autoCapitalize="none" autoCorrect={false} testID={testID} />
       {value ? <Pressable onPress={() => onChange('')} accessibilityRole="button" accessibilityLabel="Clear search" hitSlop={8}><Icon name="close-circle" size={18} color={colors.faint} /></Pressable> : null}
     </View>
   );
@@ -300,20 +305,20 @@ export function SearchBox({ value, onChange, placeholder = 'Search businesses an
 
 export const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.app },
-  pad: { paddingHorizontal: 16 },
+  pad: { paddingHorizontal: 20 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, backgroundColor: colors.app },
-  pagehead: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 6, flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
-  sectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 26, marginBottom: 6 },
+  pagehead: { paddingHorizontal: 20, paddingTop: 22, paddingBottom: 8, flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  sectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 30, marginBottom: 10 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  card: { backgroundColor: colors.pane, borderRadius: radius.lg, padding: 16, marginVertical: 6 },
+  card: { backgroundColor: colors.pane, borderRadius: radius.lg, padding: 18, marginVertical: 6, borderWidth: 1, borderColor: colors.line },
   empty: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14 },
   btn: { minHeight: 48, borderRadius: radius.md, paddingHorizontal: 20, alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-start' },
   btnSmall: { minHeight: 36, paddingHorizontal: 14, borderRadius: 10 },
   primary: { backgroundColor: colors.gold },
-  secondary: { backgroundColor: colors.pane2 },
-  danger: { backgroundColor: 'rgba(255,107,125,0.12)' },
+  secondary: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.lineStrong },
+  danger: { backgroundColor: 'rgba(239,125,107,0.12)' },
   ghost: { backgroundColor: 'transparent', paddingHorizontal: 8 },
-  btnText: { fontFamily: font.semibold, fontSize: 15, letterSpacing: -0.1 },
+  btnText: { fontFamily: font.medium, fontSize: 16 },
   btnTextSmall: { fontFamily: font.semibold, fontSize: 13 },
   label: { ...type.caption, color: colors.muted, marginBottom: 6 },
   field: { ...type.body, backgroundColor: colors.pane2, borderRadius: radius.md, color: colors.text, paddingHorizontal: 14, minHeight: 48, borderWidth: 1, borderColor: 'transparent' },
@@ -327,9 +332,9 @@ export const styles = StyleSheet.create({
   radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: colors.lineStrong, alignItems: 'center', justifyContent: 'center' },
   radioOn: { borderColor: colors.gold },
   radioDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: colors.gold },
-  pill: { paddingHorizontal: 14, height: 34, justifyContent: 'center', borderRadius: radius.pill, backgroundColor: colors.pane2 },
-  pillOn: { backgroundColor: colors.cream },
-  pillText: { fontFamily: font.semibold, fontSize: 13, color: colors.text },
+  pill: { paddingHorizontal: 16, height: 40, justifyContent: 'center', borderRadius: radius.pill },
+  pillOn: { backgroundColor: colors.gold },
+  pillText: { fontFamily: font.medium, fontSize: 15, color: colors.muted },
   banner: { flexDirection: 'row', gap: 10, alignItems: 'flex-start', borderRadius: radius.md, backgroundColor: colors.pane, padding: 12, marginVertical: 8 },
   bannerTest: { backgroundColor: 'rgba(246,198,111,0.10)', borderWidth: 1, borderColor: 'rgba(246,198,111,0.35)' },
   tag: { backgroundColor: colors.goldSoft, borderRadius: radius.pill, paddingHorizontal: 9, paddingVertical: 3, alignSelf: 'flex-start', marginRight: 6, marginTop: 6 },

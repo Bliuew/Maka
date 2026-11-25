@@ -154,6 +154,18 @@ export function registerCommerce(r, ctx) {
       productCount: (await q.get('SELECT COUNT(*) n FROM products WHERE business_id=? AND active=1', b.id)).n })),
       categories: (await q.all("SELECT DISTINCT category FROM businesses WHERE verification='verified' ORDER BY category")).map((x) => x.category) };
   });
+  // Product feed across verified stores (newest first), with category and search.
+  r.get('/api/market/products', {}, async ({ query }) => {
+    const term = String(query.get('q') || '').trim().toLowerCase(), cat = query.get('category') || '';
+    let rows = await q.all(`SELECT p.*, b.name business, b.category FROM products p JOIN businesses b ON b.id=p.business_id
+      WHERE p.active=1 AND b.verification='verified' ORDER BY p.created_at DESC LIMIT 200`);
+    if (cat) rows = rows.filter((p) => p.category === cat);
+    if (term) rows = rows.filter((p) => (p.name + ' ' + p.description + ' ' + p.business + ' ' + p.category).toLowerCase().includes(term));
+    return {
+      items: await mapAsync(rows, async (p) => ({ ...(await serProduct(p)), business: p.business, category: p.category })),
+      categories: (await q.all("SELECT DISTINCT category FROM businesses WHERE verification='verified' ORDER BY category")).map((x) => x.category),
+    };
+  });
   r.get('/api/market/businesses/:id', {}, async ({ params }) => {
     const b = (await q.get("SELECT * FROM businesses WHERE id=? AND verification='verified'", params.id)) || fail(404, 'store_not_found');
     return { business: serBiz(b), products: await mapAsync(await q.all('SELECT * FROM products WHERE business_id=? AND active=1 ORDER BY created_at', b.id), serProduct) };

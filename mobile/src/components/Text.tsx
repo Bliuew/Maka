@@ -1,5 +1,5 @@
-// Text and TextInput that always render in Inter, in the app's text colour unless a
-// style says otherwise. The weight in the style picks the matching Inter file, because
+// Text and TextInput that always render in Figtree, in the app's text colour unless a
+// style says otherwise. The weight in the style picks the matching Figtree file, because
 // Android does not synthesise weights for custom fonts.
 import React from 'react';
 import { StyleSheet, Text as RNText, TextInput as RNTextInput, type TextInputProps, type TextProps } from 'react-native';

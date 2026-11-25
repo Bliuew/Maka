@@ -69,7 +69,7 @@ try {
     const label = await tid('approved-logo').evaluate((el) => el.getAttribute('aria-label') || el.querySelector('img')?.getAttribute('alt') || '');
     assert.match(label, /Mäka\. Feel The Power Of Love Within You/);
     assert.match(await tid('approved-logo').evaluate((el) => el.querySelector('img')?.src || ''), /approved-logo/);
-    await page.getByText('Strictly 19+.').waitFor();
+    await page.getByText('Adults 19 and above only.').waitFor();
     await shot('welcome');
   });
 
@@ -137,7 +137,7 @@ try {
 
   await step('Cinema: placeholder titles cannot play', async () => {
     await tab('Cinema').click();
-    await page.getByText(/placeholder titles/).waitFor();
+    await page.getByText(/Placeholder title/).first().waitFor();
     await shot('cinema');
     await tid('poster').click();
     await page.getByText(/No film has been licensed yet/).waitFor();
@@ -148,7 +148,8 @@ try {
   });
 
   await step('Collabs: apply with 0 followers (no follower minimum)', async () => {
-    await tab('Collaborations').click();
+    await tab('Discover').click();
+    await tid('discover-campaign').click();
     await tid('offer').click();
     await page.getByText(/No follower minimum/).first().waitFor();
     await tid('pitch').fill('A 45-second golden-hour routine told as a short story, filmed vertically with captions.');
@@ -158,10 +159,10 @@ try {
   });
 
   await step('Market: storefront, bag, order saved but no payment taken', async () => {
+    await page.goBack();
     await tab('Market').click();
-    await page.getByTestId('search-input').fill('serum');
-    await page.waitForFunction(() => document.querySelectorAll('[data-testid=store]').length === 1);
-    await tid('store').click();
+    await tid('market-search').fill('serum');
+    await page.waitForFunction(() => [...document.querySelectorAll('[data-testid=product]')].filter((e) => e.offsetParent).length === 1);
     await tid('add-cart').click();
     await shot('storefront');
     await tid('view-bag').click();
@@ -172,7 +173,7 @@ try {
 
   await step('Inbox: realtime message from the brand arrives without reloading', async () => {
     await page.goBack();
-    await tab('Home feed').click();
+    await tab('Discover').click();
     await tid('open-inbox').click();
     await tid('conversation').click();
     await tid('message-input').fill('Happy to share a storyboard!');
@@ -197,7 +198,7 @@ try {
 
   await step('Profile shows public follower count; Studio shows $0 (no fake income)', async () => {
     await page.goto(base + '/profile');
-    await page.getByText('Followers').first().waitFor();
+    await page.getByText('swarm').first().waitFor();
     await shot('profile');
     await page.goto(base + '/studio');
     await tid('earnings-total').waitFor();
@@ -234,13 +235,13 @@ try {
 
   await step('Admin: moderator sees Trust & Safety and resolves a report (audited)', async () => {
     await tid('sign-out').click();
-    await page.getByRole('button', { name: 'Sign in' }).waitFor();
-    await page.getByRole('button', { name: 'Sign in' }).click();
+    await page.getByRole('button', { name: 'Log in' }).waitFor();
+    await page.getByRole('button', { name: 'Log in' }).click();
     await tid('si-email').fill('trust.safety@sample.maka.test');
     await tid('si-pass').fill('dev-admin-password');
     await tid('si-submit').click();
     await tid('feed').waitFor({ timeout: 20000 });
-    await tid('open-profile').click();
+    await page.goto(base + '/profile');
     await page.getByRole('button', { name: 'Trust and Safety' }).filter({ visible: true }).first().click();
     await page.getByText('Report queue (highest risk first)').waitFor();
     await page.getByText(/bullying · user/).first().waitFor();

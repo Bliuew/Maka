@@ -4,11 +4,10 @@ import { Text } from '../../../components/Text';
 import { useIsFocused, useRouter } from 'expo-router';
 import FeedItem from '../../../components/FeedItem';
 import { CommentsSheet, MoreSheet, usePostActions, type Post } from '../../../components/post';
-import { Avatar, Button, Icon, Loading } from '../../../components/ui';
-import { useSession } from '../../../lib/session';
+import { Button, Loading } from '../../../components/ui';
 import { api } from '../../../lib/client';
 import { on } from '../../../lib/events';
-import { colors } from '../../../lib/theme';
+import { colors, font } from '../../../lib/theme';
 
 type ViewToken = { index?: number | null; isViewable: boolean };
 type Mode = 'foryou' | 'following';
@@ -16,7 +15,6 @@ export const feedState = { muted: true };
 
 export default function Feed() {
   const router = useRouter();
-  const { me, unread } = useSession();
   const focused = useIsFocused();
   const [mode, setMode] = useState<Mode>('foryou');
   const [items, setItems] = useState<Post[] | null>(null);
@@ -62,26 +60,16 @@ export default function Feed() {
     if (v?.index != null) setActive(v.index);
   }, []);
 
-  // TikTok-style overlay: no app bar over the video, just the feed switcher with profile, search and inbox.
+  // Feed switcher, as in the founder's Home design: For You first, gold bar under the active tab.
   const tabs = (
     <View style={s.top} pointerEvents="box-none">
-      <Pressable onPress={() => router.push('/profile')} accessibilityRole="button" accessibilityLabel="Your profile" testID="open-profile" style={s.topBtn} hitSlop={6}>
-        <Avatar user={me} size={30} />
-      </Pressable>
       <View style={s.tabs} accessibilityRole="tablist">
-        {(['following', 'foryou'] as Mode[]).map((m) => (
+        {(['foryou', 'following'] as Mode[]).map((m) => (
           <Pressable key={m} onPress={() => switchMode(m)} accessibilityRole="tab" accessibilityState={{ selected: mode === m }} accessibilityLabel={m === 'foryou' ? 'For You' : 'Following'} testID={`mode-${m}`}>
             <Text style={[s.tab, mode === m && s.tabOn]}>{m === 'foryou' ? 'For You' : 'Following'}</Text>
             <View style={[s.indicator, mode !== m && { opacity: 0 }]} />
           </Pressable>
         ))}
-      </View>
-      <View style={s.topRight}>
-        <Pressable onPress={() => router.push('/search')} accessibilityRole="button" accessibilityLabel="Search" style={s.topBtn} hitSlop={6}><Icon name="search" size={25} color="#fff" style={s.shadowIcon} /></Pressable>
-        <Pressable onPress={() => router.push('/inbox')} accessibilityRole="button" accessibilityLabel={unread ? `Inbox, ${unread} unread` : 'Inbox'} testID="open-inbox" style={s.topBtn} hitSlop={6}>
-          <Icon name="paper-plane-outline" size={25} color="#fff" style={s.shadowIcon} />
-          {unread ? <View style={s.badge}><Text style={s.badgeText}>{unread > 9 ? '9+' : unread}</Text></View> : null}
-        </Pressable>
       </View>
     </View>
   );
@@ -127,16 +115,11 @@ export default function Feed() {
 }
 
 const s = StyleSheet.create({
-  top: { position: 'absolute', top: 6, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 10, zIndex: 2 },
-  topRight: { flexDirection: 'row' },
-  topBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  shadowIcon: { textShadowColor: 'rgba(0,0,0,0.4)', textShadowRadius: 6 },
-  badge: { position: 'absolute', top: 5, right: 3, minWidth: 17, height: 17, borderRadius: 9, backgroundColor: colors.like, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
-  badgeText: { color: '#fff', fontSize: 9, fontWeight: '700' },
-  tabs: { flexDirection: 'row', gap: 22, marginLeft: 44 },
-  tab: { color: 'rgba(255,255,255,0.62)', fontWeight: '600', fontSize: 16, paddingTop: 6, textAlign: 'center', textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 6 },
-  tabOn: { color: '#fff', fontWeight: '700' },
-  indicator: { alignSelf: 'center', width: 22, height: 3, borderRadius: 2, backgroundColor: '#fff', marginTop: 5 },
+  top: { position: 'absolute', top: 10, left: 0, right: 0, alignItems: 'center', zIndex: 2 },
+  tabs: { flexDirection: 'row', gap: 40 },
+  tab: { color: colors.muted, fontFamily: font.displayBold, fontSize: 19, paddingTop: 6, textAlign: 'center', textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 6 },
+  tabOn: { color: colors.text, fontFamily: font.display },
+  indicator: { alignSelf: 'center', width: 30, height: 4, borderRadius: 2, backgroundColor: colors.gold, marginTop: 6, shadowColor: colors.gold, shadowOpacity: 0.8, shadowRadius: 6 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16, backgroundColor: colors.app },
   emptyText: { color: colors.muted, textAlign: 'center', lineHeight: 21 },
 });

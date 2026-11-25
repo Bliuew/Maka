@@ -380,3 +380,32 @@ test('Only brand assets ship in web/assets (no sample photos or third-party imag
   assert.deepEqual(files.filter((f) => !allowed.has(f)), []);
   assert.ok(!/asset:/.test(fs.readFileSync(new URL('../server/seed.js', import.meta.url), 'utf8')), 'seed data references no image assets');
 });
+
+test('Discover: emerging creators are never chosen by follower count; hashtags are counted from real posts', async () => {
+  resetLimits();
+  const viewer = await adult(), quiet = await adult(), popular = await adult();
+  await post(quiet, 'first light #honeyhour'); await post(popular, 'morning #honeyhour #studio');
+  for (let i = 0; i < 3; i++) { resetLimits(); const f = await adult(); await call('POST', `/api/users/${popular.id}/follow`, f.token); }
+  const d = (await call('GET', '/api/discover', viewer.token)).data;
+  const ids = d.creators.map((u) => u.id);
+  assert.ok(ids.includes(quiet.id) && ids.includes(popular.id));
+  assert.ok(ids.indexOf(popular.id) < ids.indexOf(quiet.id), 'newest first (popular joined later), not by followers');
+  assert.equal(d.hashtags.find((h) => h.tag === '#honeyhour').posts, 2);
+  const src = fs.readFileSync(new URL('../server/routes/social.js', import.meta.url), 'utf8');
+  const fn = src.slice(src.indexOf("r.get('/api/discover'"), src.indexOf('// ---------------- creator studio'));
+  assert.ok(!/follows/.test(fn), 'discover never reads the follows table');
+});
+
+test('Market product feed lists products from verified stores only', async () => {
+  resetLimits();
+  const owner = await adult(), buyer = await adult(), admin = await adult();
+  await app.q.run("UPDATE users SET role='admin' WHERE id=?", admin.id);
+  const ok = await call('POST', '/api/businesses', owner.token, { name: 'Feed Shop', category: 'Lifestyle', registrationRef: 'R1' });
+  const pending = await call('POST', '/api/businesses', owner.token, { name: 'Pending Shop', category: 'Lifestyle', registrationRef: 'R2' });
+  await call('POST', `/api/admin/businesses/${ok.data.id}/verify`, admin.token, { decision: 'verified' });
+  await call('POST', `/api/businesses/${ok.data.id}/products`, owner.token, { name: 'Linen Throw', priceCents: 4000, stock: 3 });
+  const feed = (await call('GET', '/api/market/products?category=Lifestyle', buyer.token)).data;
+  assert.ok(feed.items.some((p) => p.name === 'Linen Throw' && p.business === 'Feed Shop'));
+  assert.ok(!feed.items.some((p) => p.business === 'Pending Shop'));
+  void pending;
+});
