@@ -44,3 +44,12 @@ npm run test:web    # exports the app for web and drives 17 flows in a phone-siz
 `src/core/` is platform-agnostic: the API client, resumable uploader, SSE parser and the 19+ gate. The integration tests run it against the real server, including uploads that survive dropped connections and an app restart.
 
 The web smoke test covers the real React Native screens rendered with react-native-web. It does **not** cover native-only behaviour: camera capture, the native video decoder, SecureStore, the share sheet and native gestures. Those need a check on a device or emulator, using the APK from the Android build workflow.
+
+## Builds (Task 4)
+
+- **App identity** (`app.json`): name **Mäka**. Bundle ID and package `io.github.bliuew.maka`, which is reverse-DNS of `bliuew.github.io`. Change it to a domain you own **before the first store upload**, because it can't change afterwards.
+- **Icons**: only the approved bee (`web/assets/icon-1024.png`). `scripts/make_app_icons.py` derives the Android adaptive icon and the splash image by scaling and padding only. The splash is the bee on midnight charcoal.
+- **Permissions**: camera, microphone (sound for recorded videos), photo access and internet. Location, contacts, overlay and legacy storage-write permissions are explicitly removed.
+- **Android APK, no paid accounts**: `.github/workflows/android-apk.yml` runs `expo prebuild` and Gradle on GitHub's runners and publishes a GitHub Release. The newest build is always at `https://github.com/Bliuew/Maka/releases/latest/download/maka.apk`. Set the repository variable `MAKA_API_URL` to bake in your server.
+- **Signing**: without keystore secrets the APK is signed with the public debug key. That is fine for testers, and updates install over each other, but Google Play won't accept it. `plugins/withReleaseSigning.js` switches to your upload keystore when the `MAKA_UPLOAD_*` secrets are set.
+- **EAS** (`eas.json`): `preview` builds an internal APK and `production` builds a Play app bundle. Using EAS cloud builds needs a (free) Expo account. iOS builds always need the Apple Developer Program.

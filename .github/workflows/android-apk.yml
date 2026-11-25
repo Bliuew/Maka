@@ -1,0 +1,130 @@
+name: Android APK
+
+# Builds an installable Android APK of the Expo app on GitHub's runners — no Expo,
+# Google Play or other paid account needed — and publishes it as a GitHub Release.
+# Every release carries the same asset name, so this link always gets the newest build:
+#   https://github.com/<owner>/<repo>/releases/latest/download/maka.apk
+#
+# Optional repository settings (Settings → Secrets and variables → Actions):
+#   Variable MAKA_API_URL                 HTTPS address of your Mäka server, baked into the app.
+#                                         Without it, testers enter the server on the welcome screen.
+#   Secrets  MAKA_UPLOAD_KEYSTORE_BASE64  base64 of your upload keystore (.jks), plus
+#            MAKA_UPLOAD_STORE_PASSWORD, MAKA_UPLOAD_KEY_ALIAS, MAKA_UPLOAD_KEY_PASSWORD.
+#                                         Without them the APK is signed with the public debug key:
+#                                         fine for testing, not accepted by Google Play.
+
+on:
+  push:
+    branches: [main, 'claude/**']
+    paths: ['mobile/**', '.github/workflows/android-apk.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    name: Build and publish APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      EXPO_PUBLIC_API_URL: ${{ vars.MAKA_API_URL }}
+      MAKA_VERSION_CODE: ${{ github.run_number }}
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('mobile/package-lock.json') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - run: npm ci
+
+      - name: Release signing (only if an upload keystore is configured)
+        env:
+          KEYSTORE_B64: ${{ secrets.MAKA_UPLOAD_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.MAKA_UPLOAD_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.MAKA_UPLOAD_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.MAKA_UPLOAD_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+            {
+              echo "MAKA_UPLOAD_STORE_FILE=$RUNNER_TEMP/upload.jks"
+              echo "MAKA_UPLOAD_STORE_PASSWORD=$STORE_PASSWORD"
+              echo "MAKA_UPLOAD_KEY_ALIAS=$KEY_ALIAS"
+              echo "MAKA_UPLOAD_KEY_PASSWORD=$KEY_PASSWORD"
+            } >> "$GITHUB_ENV"
+            echo "SIGNED_WITH=your upload keystore" >> "$GITHUB_ENV"
+          else
+            echo "SIGNED_WITH=the public debug key (test builds only — not accepted by Google Play)" >> "$GITHUB_ENV"
+          fi
+
+      - name: Generate the native Android project (Expo prebuild)
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Build release APK
+        working-directory: mobile/android
+        run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a,armeabi-v7a,x86_64
+
+      - name: Collect APK
+        id: apk
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/maka.apk"
+          echo "sha256=$(sha256sum "$RUNNER_TEMP/maka.apk" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "size=$(du -h "$RUNNER_TEMP/maka.apk" | cut -f1)" >> "$GITHUB_OUTPUT"
+          echo "version=$(node -p "require('./app.json').expo.version")" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: maka-apk
+          path: ${{ runner.temp }}/maka.apk
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: android-v${{ steps.apk.outputs.version }}-build.${{ github.run_number }}
+        run: |
+          SERVER="${EXPO_PUBLIC_API_URL:-not set — enter your server on the welcome screen (Server settings)}"
+          cat > "$RUNNER_TEMP/notes.md" <<NOTES
+          **Mäka for Android — test build ${{ steps.apk.outputs.version }} (build ${{ github.run_number }})**
+
+          Install: open this page on an Android phone, download \`maka.apk\`, and allow installing from your browser when asked.
+
+          - Server: ${SERVER}
+          - Signed with: ${SIGNED_WITH}
+          - Size: ${{ steps.apk.outputs.size }} · SHA-256: \`${{ steps.apk.outputs.sha256 }}\`
+          - Commit: ${{ github.sha }} (${{ github.ref_name }})
+
+          This is a test build for invited testers. It has not been submitted to Google Play or the App Store.
+          Age verification uses the clearly labelled test simulator until a real 19+ provider is connected on the server.
+          NOTES
+          gh release create "$TAG" "$RUNNER_TEMP/maka.apk" \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "Mäka Android ${{ steps.apk.outputs.version }} (build ${{ github.run_number }})" \
+            --notes-file "$RUNNER_TEMP/notes.md" \
+            --latest

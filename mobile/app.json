@@ -3,13 +3,38 @@
     "name": "Mäka",
     "slug": "maka",
     "version": "1.0.0",
+    "scheme": "maka",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
+    "backgroundColor": "#0b0b0d",
+    "description": "Mäka — Feel The Power Of Love Within You. A respectful 19+ community for creators, film lovers and businesses.",
     "ios": {
-      "supportsTablet": true
+      "bundleIdentifier": "io.github.bliuew.maka",
+      "buildNumber": "1",
+      "supportsTablet": false,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
+      "package": "io.github.bliuew.maka",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FDF6E9"
+      },
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "blockedPermissions": [
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.READ_CONTACTS",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ],
       "predictiveBackGestureEnabled": false
     },
     "web": {
@@ -21,13 +46,37 @@
     },
     "plugins": [
       "expo-router",
-      "expo-video",
+      [
+        "expo-video",
+        {
+          "supportsBackgroundPlayback": false,
+          "supportsPictureInPicture": false
+        }
+      ],
       "expo-secure-store",
-      "expo-splash-screen",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "backgroundColor": "#0b0b0d"
+        }
+      ],
       "expo-image",
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Mäka uses your photo library so you can choose videos and photos to post, and a profile picture.",
+          "cameraPermission": "Mäka uses the camera so you can record videos and take photos to post.",
+          "microphonePermission": "Mäka uses the microphone to record sound with your videos."
+        }
+      ],
+      "./plugins/withReleaseSigning"
     ],
-    "scheme": "maka",
-    "backgroundColor": "#0b0b0d"
+    "extra": {
+      "apiUrl": ""
+    }
   }
 }
