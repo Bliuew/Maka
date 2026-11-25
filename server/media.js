@@ -12,7 +12,6 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { pipeline } from 'node:stream/promises';
 import { config } from './config.js';
 
 const run = promisify(execFile);
@@ -71,15 +70,17 @@ export async function appendChunk(storage, q, media, offset, req) {
 /** Concatenate the uploaded parts into one local file. */
 async function assemble(storage, media, dest) {
   const keys = await storage.list(partsPrefix(media.id));
-  const out = fs.createWriteStream(dest);
+  const out = await fs.promises.open(dest, 'w');
+  const tmp = dest + '.part';
   try {
     for (const k of keys) {
-      const tmp = dest + '.part';
       await storage.download(k, tmp);
-      await pipeline(fs.createReadStream(tmp), out, { end: false });
-      await fs.promises.rm(tmp, { force: true });
+      await out.write(await fs.promises.readFile(tmp)); // parts are ≤ maxChunkBytes
     }
-  } finally { await new Promise((r) => out.end(r)); }
+  } finally {
+    await out.close();
+    await fs.promises.rm(tmp, { force: true });
+  }
   return keys;
 }
 
