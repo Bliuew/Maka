@@ -3,6 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { createMailer } from './mail.js';
 import { createPayments } from './payments.js';
+import { createPush } from './push.js';
 import { config } from './config.js';
 import { openDb, helpers, id, now } from './db.js';
 import { createStorage } from './storage.js';
@@ -22,7 +23,7 @@ const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
 /** Map an array through an async function, in order. */
 export const mapAsync = (list, fn) => Promise.all(list.map(fn));
 
-export async function createApp({ databaseUrl, schema, storage, mailer, payments } = {}) {
+export async function createApp({ databaseUrl, schema, storage, mailer, payments, push } = {}) {
   const db = await openDb({ url: databaseUrl, schema });
   const q = helpers(db);
   storage = storage || await createStorage();
@@ -56,7 +57,14 @@ export async function createApp({ databaseUrl, schema, storage, mailer, payments
       await q.run('INSERT INTO notifications (id,user_id,type,actor_id,ref_type,ref_id,text,created_at) VALUES (?,?,?,?,?,?,?,?)',
         nid, userId, type, actorId, refType, refId, text, now());
       events.emit(userId, 'notification', { id: nid, type, text });
-      // Push (APNs/FCM) is delivered here once config.pushProvider is configured.
+      ctx.pushTo(userId, { title: 'Mäka', body: text, data: { type, refType, refId } });
+    },
+    // Fire-and-forget: a slow or failing push service never delays the request.
+    pushTo(userId, msg) {
+      if (!ctx.push) return;
+      q.all('SELECT token FROM push_tokens WHERE user_id=?', userId)
+        .then((rows) => rows.length && ctx.push.send(rows.map((r) => r.token), msg))
+        .catch((e) => console.error('push failed:', e.message));
     },
     async isBlockedEitherWay(a, b) {
       return !!await q.get('SELECT 1 FROM blocks WHERE (blocker_id=? AND blocked_id=?) OR (blocker_id=? AND blocked_id=?)', a, b, b, a);
@@ -127,6 +135,7 @@ export async function createApp({ databaseUrl, schema, storage, mailer, payments
     stream: { tickets, streams },
     sha,
   };
+  ctx.push = push === undefined ? createPush(process.env, { onInvalidToken: (t) => q.run('DELETE FROM push_tokens WHERE token=?', t).catch(() => {}) }) : push;
 
   // ---- authentication middleware -----------------------------------------
   async function authenticate(req) {
@@ -173,7 +182,7 @@ export async function createApp({ databaseUrl, schema, storage, mailer, payments
       integrations: {
         ageVerification: config.ageProvider === 'test' ? 'TEST SIMULATOR (not real verification)' : config.ageProvider,
         payments: ctx.payments?.provider || 'not configured',
-        push: config.pushProvider || 'not configured',
+        push: ctx.push?.provider || 'not configured',
         live: config.liveProvider || 'not configured',
         mediaScanning: config.mediaScanner || 'not configured',
         filmLicensing: 'no licensed titles',

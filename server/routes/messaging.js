@@ -43,6 +43,8 @@ export function registerMessaging(r, ctx) {
       for (const m of await q.all('SELECT user_id FROM conversation_members WHERE conversation_id=? AND user_id!=?', cid, sender.id)) {
         if (await ctx.isBlockedEitherWay(m.user_id, sender.id)) continue;
         ctx.events.emit(m.user_id, 'message', { conversationId: cid, id: mid, body: text, sender: sender.handle, createdAt: t });
+        if (!await q.get('SELECT 1 FROM mutes WHERE muter_id=? AND muted_id=?', m.user_id, sender.id))
+          ctx.pushTo(m.user_id, { title: 'Mäka', body: `New message from @${sender.handle}`, data: { type: 'message', refType: 'conversation', refId: cid } });
       }
     } else {
       await q.run('INSERT INTO reports (id,reporter_id,target_type,target_id,target_user_id,reason,details,evidence,priority,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)',

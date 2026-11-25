@@ -51,6 +51,7 @@ export function registerAdmin(r, ctx) {
     if (level === 'ban') {
       await q.run("UPDATE users SET status='banned' WHERE id=?", userId);
       await q.run('DELETE FROM sessions WHERE user_id=?', userId);
+      await q.run('DELETE FROM push_tokens WHERE user_id=?', userId);
       // Ban evasion: block the verified identity (not the IP) from re-registering.
       for (const c of await q.all('SELECT person_ref_hash FROM age_checks WHERE user_id=? AND person_ref_hash IS NOT NULL', userId))
         await q.run('INSERT INTO banned_identities (person_ref_hash,user_id,created_at) VALUES (?,?,?) ON CONFLICT DO NOTHING', c.person_ref_hash, userId, now());

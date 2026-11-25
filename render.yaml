@@ -50,6 +50,8 @@ services:
         sync: false
       - key: MUX_WEBHOOK_SECRET
         sync: false
+      - key: PUSH_PROVIDER        # expo (phone notifications)
+        sync: false
       - key: MAIL_PROVIDER        # resend or postmark (password-reset email)
         sync: false
       - key: MAIL_API_KEY

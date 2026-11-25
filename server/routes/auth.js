@@ -4,6 +4,7 @@ import { fail, clientIp } from '../http.js';
 import { id, now } from '../db.js';
 import { AGE_METHODS, getProvider, personRefHash } from '../age.js';
 import { screenText } from '../safety.js';
+import { validPushToken } from '../push.js';
 
 const scrypt = promisify(crypto.scrypt);
 const SC = { N: 16384, r: 8, p: 1 };
@@ -120,8 +121,24 @@ export function registerAuth(r, ctx) {
       await q.run('UPDATE users SET pass_hash=? WHERE id=?', await hashPassword(password), row.user_id);
       await q.run('UPDATE password_resets SET used_at=? WHERE user_id=? AND used_at IS NULL', now(), row.user_id);
       await q.run('DELETE FROM sessions WHERE user_id=?', row.user_id); // sign out everywhere
+      await q.run('DELETE FROM push_tokens WHERE user_id=?', row.user_id);
       await ctx.audit(row.user_id, 'password_reset', 'user', row.user_id, {});
     });
+    return { ok: true };
+  });
+
+  // Phone push tokens. A token belongs to one account at a time (the last one to sign in on that phone).
+  r.post('/api/me/push-tokens', { auth: 'session' }, async ({ user, body }) => {
+    const b = await body();
+    if (!validPushToken(b.token)) fail(400, 'invalid_token');
+    await q.run(`INSERT INTO push_tokens (token,user_id,platform,created_at) VALUES (?,?,?,?)
+      ON CONFLICT (token) DO UPDATE SET user_id=EXCLUDED.user_id, platform=EXCLUDED.platform, created_at=EXCLUDED.created_at`,
+      b.token, user.id, ['ios', 'android'].includes(b.platform) ? b.platform : null, now());
+    return { ok: true, enabled: !!ctx.push };
+  });
+  r.delete('/api/me/push-tokens', { auth: 'session' }, async ({ user, body }) => {
+    const b = await body();
+    await q.run('DELETE FROM push_tokens WHERE token=? AND user_id=?', String(b.token || ''), user.id);
     return { ok: true };
   });
 
@@ -171,6 +188,7 @@ export function registerAuth(r, ctx) {
       for (const t of ['likes', 'saves', 'views', 'not_interested', 'watchlist', 'watch_progress']) await q.run(`DELETE FROM ${t} WHERE user_id=?`, user.id);
       await q.run('DELETE FROM follows WHERE follower_id=? OR followee_id=?', user.id, user.id);
       await q.run('DELETE FROM sessions WHERE user_id=?', user.id);
+      await q.run('DELETE FROM push_tokens WHERE user_id=?', user.id);
       const gone = 'deleted_' + user.id.slice(2);
       await q.run("UPDATE users SET status='deleted', email=?, email_norm=?, handle=?, display_name='Deleted account', bio='', avatar=NULL, pass_hash='x' WHERE id=?",
         gone + '@deleted.invalid', gone + '@deleted.invalid', gone, user.id);
@@ -224,6 +242,7 @@ export function registerAuth(r, ctx) {
       await q.run("UPDATE users SET age_status='failed', status='ineligible', email=?, email_norm=?, display_name='Closed', bio='', pass_hash='x' WHERE id=?",
         'closed_' + user.id + '@invalid', 'closed_' + user.id + '@invalid', user.id);
       await q.run('DELETE FROM sessions WHERE user_id=?', user.id);
+      await q.run('DELETE FROM push_tokens WHERE user_id=?', user.id);
     } else if (outcome === 'review') {
       await q.run("UPDATE users SET age_status='review' WHERE id=?", user.id);
       await q.run('INSERT INTO reports (id,reporter_id,target_type,target_id,target_user_id,reason,details,priority,created_at) VALUES (?,?,?,?,?,?,?,?,?)',

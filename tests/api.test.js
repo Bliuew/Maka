@@ -728,3 +728,53 @@ test('Veriff age check: signed decisions only, strict 19+ from date of birth, bi
     fake.close();
   }
 });
+
+test('Push: notifications reach the phone, message text never does, mutes and dead tokens respected', async () => {
+  resetLimits();
+  const http = await import('node:http');
+  const { createPush } = await import('../server/push.js');
+  const sent = [];
+  const fake = http.createServer((req, res) => {
+    let b = ''; req.on('data', (d) => { b += d; });
+    req.on('end', () => {
+      const msgs = JSON.parse(b); sent.push(...msgs);
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ data: msgs.map((m) => m.to === 'ExponentPushToken[dead]' ? { status: 'error', details: { error: 'DeviceNotRegistered' } } : { status: 'ok', id: 't' }) }));
+    });
+  });
+  await new Promise((r) => fake.listen(0, r));
+  const saved = app.ctx.push;
+  app.ctx.push = createPush({ PUSH_PROVIDER: 'expo', EXPO_PUSH_URL: `http://localhost:${fake.address().port}` }, { onInvalidToken: (t) => app.q.run('DELETE FROM push_tokens WHERE token=?', t) });
+  const settle = () => new Promise((r) => setTimeout(r, 150));
+  try {
+    const a = await adult(), b = await adult(), c = await adult();
+    assert.equal((await call('POST', '/api/me/push-tokens', a.token, { token: 'not-a-token' })).status, 400);
+    assert.equal((await call('POST', '/api/me/push-tokens', a.token, { token: 'ExponentPushToken[aaa]', platform: 'android' })).data.enabled, true);
+    await call('POST', '/api/me/push-tokens', a.token, { token: 'ExponentPushToken[dead]', platform: 'ios' });
+    await call('POST', `/api/users/${a.id}/follow`, b.token);
+    await settle();
+    assert.ok(sent.some((m) => m.to === 'ExponentPushToken[aaa]' && /follow/i.test(m.body)), 'follow notification pushed');
+    assert.equal((await app.q.get("SELECT COUNT(*) n FROM push_tokens WHERE token='ExponentPushToken[dead]'")).n, 0, 'unregistered device token removed');
+    sent.length = 0;
+    await call('POST', `/api/users/${b.id}/follow`, a.token);
+    const cv = await call('POST', '/api/conversations', b.token, { memberIds: [a.id], message: 'my secret plans for friday' });
+    assert.equal(cv.status, 200, JSON.stringify(cv.data));
+    await settle();
+    const dm = sent.find((m) => m.data?.type === 'message');
+    assert.ok(dm, 'message pushed');
+    assert.ok(!JSON.stringify(sent).includes('secret plans'), 'message text never sent to the push service');
+    sent.length = 0;
+    await call('POST', `/api/users/${c.id}/mute`, a.token);
+    await call('POST', `/api/users/${a.id}/follow`, c.token);
+    await settle();
+    assert.equal(sent.length, 0, 'muted accounts do not push');
+    // Signing in on the same phone with another account moves the token.
+    await call('POST', '/api/me/push-tokens', c.token, { token: 'ExponentPushToken[aaa]' });
+    assert.equal((await app.q.get("SELECT user_id FROM push_tokens WHERE token='ExponentPushToken[aaa]'")).user_id, c.id);
+    await call('DELETE', '/api/me/push-tokens', c.token, { token: 'ExponentPushToken[aaa]' });
+    assert.equal((await app.q.get("SELECT COUNT(*) n FROM push_tokens WHERE token='ExponentPushToken[aaa]'")).n, 0);
+  } finally {
+    app.ctx.push = saved;
+    fake.close();
+  }
+});

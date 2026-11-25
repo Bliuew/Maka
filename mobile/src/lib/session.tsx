@@ -5,6 +5,7 @@ import { connectRealtime } from './realtime';
 import { emit } from './events';
 import { areaFor, type Area, type Me } from '../core/gate';
 import { useToast } from './toast';
+import { unregisterPush } from './push';
 
 type Session = {
   ready: boolean;
@@ -63,7 +64,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<Session>(() => ({
     ready, me, unread, area: areaFor(token(), me), setMe,
     signIn: (t, m) => { setToken(t); setMe(m); },
-    signOut: async () => { try { await api.post('/api/auth/logout'); } catch { /* already out */ } setToken(null); setMe(null); },
+    signOut: async () => { await unregisterPush(); try { await api.post('/api/auth/logout'); } catch { /* already out */ } setToken(null); setMe(null); },
     refreshMe: async () => { setMe(await api.get('/api/me')); },
     refreshUnread,
   }), [ready, me, unread, refreshUnread]);

@@ -1,8 +1,10 @@
 import React from 'react';
 import { Stack } from 'expo-router';
 import { colors, font } from '../../lib/theme';
+import { usePush } from '../../lib/push';
 
 export default function AppLayout() {
+  usePush();
   return (
     <Stack screenOptions={{
       headerStyle: { backgroundColor: colors.bg }, headerTintColor: colors.text, headerShadowVisible: false,
