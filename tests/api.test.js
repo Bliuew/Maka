@@ -649,3 +649,82 @@ test('Live with Mux: host gets an ingest key, goes live when the encoder connect
     fake.close();
   }
 });
+
+test('Veriff age check: signed decisions only, strict 19+ from date of birth, birth date never stored, human review', async () => {
+  resetLimits();
+  const crypto = await import('node:crypto');
+  const http = await import('node:http');
+  const { createVeriff, setAgeProvider, ageOn } = await import('../server/age.js');
+  assert.equal(ageOn('2000-11-25', new Date('2019-11-25T00:00:00Z')), 19, 'turns 19 on the birthday');
+  assert.equal(ageOn('2000-11-26', new Date('2019-11-25T00:00:00Z')), 18, 'one day short is 18');
+  let n = 0; const sessions = [];
+  const fake = http.createServer((req, res) => {
+    let b = ''; req.on('data', (d) => { b += d; });
+    req.on('end', () => {
+      sessions.push({ headers: req.headers, body: JSON.parse(b) });
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ status: 'success', verification: { id: 'vf_' + ++n, url: 'https://magic.veriff.test/v/' + n } }));
+    });
+  });
+  await new Promise((r) => fake.listen(0, r));
+  const mod = await adult('vfmod');
+  await app.q.run("UPDATE users SET role='admin' WHERE id=?", mod.id);
+  setAgeProvider(createVeriff({ AGE_PROVIDER_API_KEY: 'vk', AGE_PROVIDER_SECRET: 'vsecret', AGE_PROVIDER_API_BASE: `http://localhost:${fake.address().port}` }, 19));
+  const decide = async (checkId, sessionId, verification, secret = 'vsecret') => {
+    const raw = JSON.stringify({ status: 'success', verification: { id: sessionId, vendorData: checkId, ...verification } });
+    const res = await fetch(base + '/api/age/webhook', { method: 'POST', headers: { 'content-type': 'application/json', 'x-hmac-signature': crypto.createHmac('sha256', secret).update(raw).digest('hex') }, body: raw });
+    return { status: res.status, data: await res.json() };
+  };
+  const yearsAgo = (y, extraDays = 0) => { const d = new Date(); d.setUTCFullYear(d.getUTCFullYear() - y); d.setUTCDate(d.getUTCDate() + extraDays); return d.toISOString().slice(0, 10); };
+  const signup = async (h) => (await call('POST', '/api/auth/register', null, { email: `${h}@ex.com`, password: 'long-enough-pw', handle: h, displayName: h, acceptTerms: true })).data;
+  try {
+    const methods = (await call('GET', '/api/age/methods')).data;
+    assert.equal(methods.isTestMode, false);
+    assert.deepEqual(methods.methods.map((m) => m.id), ['government_id', 'id_selfie'], 'only methods the provider supports');
+    assert.equal((await call('POST', '/api/age/test/complete', null, {})).status, 401);
+    // Adult
+    const a = await signup('vfadult');
+    assert.equal((await call('POST', '/api/age/start', a.token, { method: 'bank' })).data.error, 'invalid_method');
+    const s = (await call('POST', '/api/age/start', a.token, { method: 'government_id' })).data;
+    assert.equal(s.redirectUrl, 'https://magic.veriff.test/v/1');
+    assert.equal(sessions[0].headers['x-auth-client'], 'vk');
+    assert.equal(sessions[0].body.verification.vendorData, s.checkId);
+    assert.equal((await call('POST', '/api/age/test/complete', a.token, { checkId: s.checkId, outcome: 'verified' })).status, 404, 'simulator is gone with a real provider');
+    const adultDecision = { status: 'approved', person: { dateOfBirth: yearsAgo(19), firstName: 'A' }, document: { number: 'P123', country: 'CA', type: 'PASSPORT' } };
+    assert.equal((await decide(s.checkId, 'vf_1', adultDecision, 'forged')).status, 401, 'forged decision refused');
+    assert.equal((await decide(s.checkId, 'vf_other', adultDecision)).status, 400, 'decision for another session refused');
+    assert.equal((await decide(s.checkId, 'vf_1', adultDecision)).status, 200);
+    assert.equal((await call('GET', '/api/me', a.token)).data.ageStatus, 'verified');
+    const stored = JSON.stringify(await app.q.all('SELECT * FROM age_checks WHERE user_id=?', a.user.id));
+    assert.ok(!stored.includes(yearsAgo(19)) && !stored.includes('P123'), 'birth date and document number are not stored');
+    // One day short of 19
+    const k = await signup('vfyoung');
+    const s2 = (await call('POST', '/api/age/start', k.token, { method: 'id_selfie' })).data;
+    await decide(s2.checkId, 'vf_2', { status: 'approved', person: { dateOfBirth: yearsAgo(19, 1) }, document: { number: 'P999', country: 'CA', type: 'PASSPORT' } });
+    assert.equal((await call('GET', '/api/me', k.token)).status, 401, 'under-19 account closed and signed out');
+    assert.equal((await app.q.get('SELECT status FROM users WHERE id=?', k.user.id)).status, 'ineligible');
+    // Approved without a birth date -> human review
+    const r = await signup('vfreview');
+    const s3 = (await call('POST', '/api/age/start', r.token, { method: 'government_id' })).data;
+    await decide(s3.checkId, 'vf_3', { status: 'approved', person: {}, document: { number: 'D1', country: 'CA', type: 'DRIVERS_LICENSE' } });
+    assert.equal((await call('GET', '/api/me', r.token)).data.ageStatus, 'review');
+    const queue = (await call('GET', '/api/admin/age-reviews', mod.token)).data;
+    const item = queue.find((x) => x.userId === r.user.id);
+    assert.equal(item.providerRef, 'vf_3', 'reviewer can find the session in the provider dashboard');
+    assert.match(item.reason, /could not confirm the date of birth/);
+    assert.equal((await call('POST', `/api/admin/age-reviews/${r.user.id}/decide`, mod.token, { decision: 'verified' })).data.error, 'note_required');
+    assert.equal((await call('POST', `/api/admin/age-reviews/${r.user.id}/decide`, r.token, { decision: 'verified', note: 'x' })).status, 403);
+    assert.equal((await call('POST', `/api/admin/age-reviews/${r.user.id}/decide`, mod.token, { decision: 'verified', note: 'DOB confirmed in provider dashboard' })).status, 200);
+    assert.equal((await call('GET', '/api/me', r.token)).data.ageStatus, 'verified');
+    assert.ok((await call('GET', '/api/admin/audit', mod.token)).data.some((x) => x.action === 'age_review_verified'));
+    // Declined -> can try again
+    const d = await signup('vfdeclined');
+    const s4 = (await call('POST', '/api/age/start', d.token, { method: 'government_id' })).data;
+    await decide(s4.checkId, 'vf_4', { status: 'declined' });
+    assert.equal((await call('GET', '/api/me', d.token)).data.ageStatus, 'failed');
+    assert.equal((await call('POST', '/api/age/start', d.token, { method: 'government_id' })).status, 200, 'can retry after a decline');
+  } finally {
+    setAgeProvider(null);
+    fake.close();
+  }
+});

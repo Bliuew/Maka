@@ -16,8 +16,8 @@ export default function Admin() {
   const allowed = canSeeAdmin(me);
   const { data, error, reload, refreshing } = useLoad(async () => {
     if (!allowed) return null;
-    const [o, reports, appeals, biz, audit] = await Promise.all(['/api/admin/overview', '/api/admin/reports', '/api/admin/appeals', '/api/admin/businesses', '/api/admin/audit'].map((p) => api.get<any>(p)));
-    return { o, reports, appeals, biz, audit };
+    const [o, reports, appeals, biz, audit, ages] = await Promise.all(['/api/admin/overview', '/api/admin/reports', '/api/admin/appeals', '/api/admin/businesses', '/api/admin/audit', '/api/admin/age-reviews'].map((p) => api.get<any>(p)));
+    return { o, reports, appeals, biz, audit, ages };
   });
   const [notes, setNotes] = useState<Record<string, string>>({});
   if (!allowed) return <Screen><Empty>Not available.</Empty></Screen>;
@@ -53,6 +53,20 @@ export default function Admin() {
             <Button title="Uphold" small variant="secondary" onPress={act(() => api.post(`/api/admin/appeals/${a.id}/decide`, { decision: 'upheld' }), 'Appeal upheld')} /></Row>
         </Card>
       )) : <Empty>No open appeals.</Empty>}
+      <SectionTitle>Age checks needing a decision</SectionTitle>
+      {data.ages.length ? data.ages.map((a: any) => (
+        <Card key={a.userId}>
+          <P><Text style={{ fontWeight: '800' }}>@{a.handle}</Text>{a.provider ? ` · ${a.provider} session ${a.providerRef || 'unknown'}` : ''}</P>
+          <P muted>{a.reason || 'Needs a human decision.'} Look at the session in the provider’s dashboard; Mäka never holds the ID.</P>
+          <TextInput style={[ui.field, { marginTop: 6 }]} placeholder="Reason (kept for audits)" placeholderTextColor="#77737b" accessibilityLabel={`Reason for age decision on @${a.handle}`}
+            value={notes['age:' + a.userId] || ''} onChangeText={(t) => setNotes({ ...notes, ['age:' + a.userId]: t })} />
+          <Row wrap style={{ marginTop: 8 }}>
+            <Button title="19 or older" small onPress={act(() => api.post(`/api/admin/age-reviews/${a.userId}/decide`, { decision: 'verified', note: notes['age:' + a.userId] || '' }), 'Verified')} />
+            <Button title="Couldn’t confirm" small variant="secondary" onPress={act(() => api.post(`/api/admin/age-reviews/${a.userId}/decide`, { decision: 'failed', note: notes['age:' + a.userId] || '' }), 'Marked not confirmed')} />
+            <Button title="Under 19" small variant="danger" onPress={act(() => api.post(`/api/admin/age-reviews/${a.userId}/decide`, { decision: 'under_age', note: notes['age:' + a.userId] || '' }), 'Account closed')} />
+          </Row>
+        </Card>
+      )) : <Empty>None waiting.</Empty>}
       <SectionTitle>Business verification</SectionTitle>
       {data.biz.length ? data.biz.map((b: any) => (
         <Card key={b.id}>

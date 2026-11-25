@@ -54,6 +54,8 @@ export function assertProductionSafe() {
   if (!process.env.MAKA_SECRET) problems.push('MAKA_SECRET is not set');
   if (config.ageProvider === 'test') problems.push('AGE_PROVIDER=test (simulator) cannot run in production');
   if (!config.ageProviderKey) problems.push('AGE_PROVIDER_API_KEY missing');
+  if (config.ageProvider === 'veriff' && !process.env.AGE_PROVIDER_SECRET) problems.push('AGE_PROVIDER_SECRET (Veriff shared secret) missing');
+  if (!['test', 'veriff'].includes(config.ageProvider)) problems.push(`AGE_PROVIDER=${config.ageProvider} has no adapter`);
   if (config.seedSamples) problems.push('SEED_SAMPLES must be 0 in production');
   if (!process.env.DATABASE_URL) problems.push('DATABASE_URL (PostgreSQL) is not set');
   if (process.env.PAYMENTS_PROVIDER === 'stripe' && !(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_WEBHOOK_SECRET)) problems.push('PAYMENTS_PROVIDER=stripe needs STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET');

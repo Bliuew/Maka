@@ -36,6 +36,12 @@ services:
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
+      - key: AGE_PROVIDER         # veriff (required before NODE_ENV=production)
+        sync: false
+      - key: AGE_PROVIDER_API_KEY
+        sync: false
+      - key: AGE_PROVIDER_SECRET
+        sync: false
       - key: LIVE_PROVIDER        # mux (leave empty until your Mux account is ready)
         sync: false
       - key: MUX_TOKEN_ID

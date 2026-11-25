@@ -191,27 +191,30 @@ export function registerAuth(r, ctx) {
   // ---- 19+ age assurance ---------------------------------------------------
   r.get('/api/age/methods', { auth: 'public' }, () => {
     const p = getProvider();
-    return { threshold: ctx.config.minimumAge, provider: p.name, isTestMode: !!p.isTest, methods: AGE_METHODS };
+    return { threshold: ctx.config.minimumAge, provider: p.name, isTestMode: !!p.isTest, methods: AGE_METHODS.filter((m) => !p.methods || p.methods.includes(m.id)) };
   });
 
   r.post('/api/age/start', { auth: 'session' }, async ({ user, body }) => {
     if (user.age_status === 'verified') fail(409, 'already_verified');
     const b = await body();
-    if (!AGE_METHODS.some((m) => m.id === b.method)) fail(400, 'invalid_method');
     const provider = getProvider();
+    if (!AGE_METHODS.some((m) => m.id === b.method) || (provider.methods && !provider.methods.includes(b.method))) fail(400, 'invalid_method');
+    ctx.limiter.check('agestart:' + user.id, 5, 5 / 60);
     const checkId = id('ac_');
     let start;
-    try { start = provider.start({ id: checkId, userId: user.id, method: b.method, threshold: ctx.config.minimumAge }); }
+    try { start = await provider.start({ id: checkId, userId: user.id, method: b.method, threshold: ctx.config.minimumAge }); }
     catch (e) { fail(503, e.code || 'age_provider_error', e.message); }
-    await q.run('INSERT INTO age_checks (id,user_id,provider,method,status,created_at) VALUES (?,?,?,?,?,?)', checkId, user.id, provider.name, b.method, 'started', now());
+    await q.run('INSERT INTO age_checks (id,user_id,provider,method,status,created_at,provider_ref) VALUES (?,?,?,?,?,?,?)', checkId, user.id, provider.name, b.method, 'started', now(), start.providerRef || null);
     await q.run("UPDATE users SET age_status='pending' WHERE id=?", user.id);
     return { checkId, redirectUrl: start.redirectUrl, isTestMode: !!provider.isTest };
   });
 
-  async function completeCheck(check, outcome, personRef) {
+  async function completeCheck(check, outcome, personRef, reviewReason) {
     const refHash = personRef ? personRefHash(personRef) : null;
     const user = await q.get('SELECT * FROM users WHERE id=?', check.user_id);
-    if (outcome === 'verified' && refHash && await q.get('SELECT 1 FROM banned_identities WHERE person_ref_hash=?', refHash)) outcome = 'review';
+    if (outcome === 'verified' && refHash && await q.get('SELECT 1 FROM banned_identities WHERE person_ref_hash=?', refHash)) {
+      outcome = 'review'; reviewReason = 'Age-verified identity matches a banned account (possible ban evasion).';
+    }
     await q.run('UPDATE age_checks SET status=?, over_threshold=?, person_ref_hash=?, completed_at=? WHERE id=?',
       outcome, outcome === 'verified' ? 1 : outcome === 'under_age' ? 0 : null, refHash, now(), check.id);
     if (outcome === 'verified') {
@@ -224,7 +227,7 @@ export function registerAuth(r, ctx) {
     } else if (outcome === 'review') {
       await q.run("UPDATE users SET age_status='review' WHERE id=?", user.id);
       await q.run('INSERT INTO reports (id,reporter_id,target_type,target_id,target_user_id,reason,details,priority,created_at) VALUES (?,?,?,?,?,?,?,?,?)',
-        id('r_'), 'system', 'user', user.id, user.id, 'other', 'Age-verified identity matches a banned account (possible ban evasion).', 4, now());
+        id('r_'), 'system', 'user', user.id, user.id, 'other', reviewReason || 'Age check needs a human decision: the provider could not confirm the date of birth. Check the session in the provider dashboard.', 4, now());
     } else {
       await q.run("UPDATE users SET age_status='failed' WHERE id=?", user.id);
     }
@@ -243,8 +246,21 @@ export function registerAuth(r, ctx) {
     return { outcome, user: outcome === 'under_age' ? null : await me(await q.get('SELECT * FROM users WHERE id=?', user.id)) };
   });
 
-  r.post('/api/age/webhook', { auth: 'public' }, () => {
-    fail(501, 'age_provider_not_configured', 'Connect a real age-assurance provider to receive verification webhooks.');
+  // Provider decision webhook. Only a correctly signed decision for a started check counts;
+  // the birth date is used once to compare with 19 and is never stored.
+  r.post('/api/age/webhook', { auth: 'public' }, async ({ req, raw }) => {
+    const provider = getProvider();
+    if (!provider.parseWebhook) fail(501, 'age_provider_not_configured', 'Connect a real age-assurance provider to receive verification webhooks.');
+    let d;
+    try { d = provider.parseWebhook(await raw(), req.headers); } catch (e) { fail(e.status || 400, e.code || 'invalid_signature'); }
+    if (!d) return { received: true };
+    const check = await q.get("SELECT * FROM age_checks WHERE id=? AND provider=? AND status='started'", d.checkId, provider.name);
+    if (!check) return { received: true, ignored: true };
+    if (check.provider_ref && d.providerRef && check.provider_ref !== d.providerRef) fail(400, 'session_mismatch');
+    const outcome = await completeCheck(check, d.outcome, d.personRef);
+    if (outcome !== 'under_age') await ctx.notify(check.user_id, 'age_check', null, 'user', check.user_id,
+      outcome === 'verified' ? 'You’re verified. Welcome to Mäka.' : outcome === 'review' ? 'Your age check is being reviewed by our team.' : 'Your age check didn’t go through. You can try again.');
+    return { received: true };
   });
   ctx.completeAgeCheck = completeCheck;
 }

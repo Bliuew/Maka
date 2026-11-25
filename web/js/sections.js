@@ -343,7 +343,7 @@ forms.deleteAccount = async (f) => { await api.del('/api/me', formData(f)); api.
 // ======================= TRUST & SAFETY ADMIN =======================
 screens.admin = async (el) => {
   if (state.me.role !== 'admin') { el.innerHTML = '<div class="empty">Not available.</div>'; return; }
-  const [o, reports, appeals, biz, audit] = await Promise.all([api.get('/api/admin/overview'), api.get('/api/admin/reports'), api.get('/api/admin/appeals'), api.get('/api/admin/businesses'), api.get('/api/admin/audit')]);
+  const [o, reports, appeals, biz, audit, ages] = await Promise.all([api.get('/api/admin/overview'), api.get('/api/admin/reports'), api.get('/api/admin/appeals'), api.get('/api/admin/businesses'), api.get('/api/admin/audit'), api.get('/api/admin/age-reviews')]);
   el.innerHTML = `<div class="pagehead"><h1>Moderation</h1><p>Every action is logged and can be appealed.</p></div><div class="pad">
     <div class="metrics"><div class="metric"><strong>${o.openReports}</strong><span>Open reports</span></div><div class="metric"><strong>${o.openAppeals}</strong><span>Appeals</span></div><div class="metric"><strong>${o.pendingBusinesses}</strong><span>Businesses</span></div></div>
     <div class="section-title">Report queue (highest risk first)</div>
@@ -353,11 +353,16 @@ screens.admin = async (el) => {
       ${['dismiss', 'approve_content', 'remove_content', 'warning', 'restrict', 'suspend', 'ban', 'escalate'].map((a) => `<button class="button small ${a === 'ban' ? 'danger' : 'secondary'}" type="submit" data-action="${a}">${a.replace('_', ' ')}</button>`).join('')}</form></div>`).join('') || '<p class="subtle">Queue is clear.</p>'}
     <div class="section-title">Appeals</div>${appeals.map((a) => `<div class="adminitem"><strong>@${esc(a.user.handle)}</strong> appeals ${esc(a.sanction?.level)}: ${esc(a.sanction?.reason)}<p>${esc(a.body)}</p>
       <div class="row"><button class="button small" data-act="decideAppeal" data-id="${a.id}" data-d="overturned">Overturn</button><button class="button small secondary" data-act="decideAppeal" data-id="${a.id}" data-d="upheld">Uphold</button></div></div>`).join('') || '<p class="subtle">No open appeals.</p>'}
+    <div class="section-title">Age checks needing a decision</div>${ages.map((a) => `<div class="adminitem"><strong>@${esc(a.handle)}</strong>${a.provider ? ` · ${esc(a.provider)} session ${esc(a.providerRef || 'unknown')}` : ''}
+      <p class="subtle">${esc(a.reason || 'Needs a human decision.')} Look at the session in the provider’s dashboard; Mäka never holds the ID.</p>
+      <form data-form="ageDecide" data-id="${a.userId}" class="row wrap"><input class="field" name="note" placeholder="Reason (kept for audits)" style="flex:1 1 100%">
+      <button class="button small" type="submit" data-d="verified">19 or older</button><button class="button small secondary" type="submit" data-d="failed">Couldn’t confirm</button><button class="button small danger" type="submit" data-d="under_age">Under 19</button></form></div>`).join('') || '<p class="subtle">None waiting.</p>'}
     <div class="section-title">Business verification</div>${biz.map((b) => `<div class="adminitem"><strong>${esc(b.name)}</strong> · ${esc(b.category)} · reg ${esc(b.registration_ref)}
       <div class="row" style="margin-top:8px"><button class="button small" data-act="verifyBiz" data-id="${b.id}" data-d="verified">Verify</button><button class="button small secondary" data-act="verifyBiz" data-id="${b.id}" data-d="rejected">Reject</button></div></div>`).join('') || '<p class="subtle">None pending.</p>'}
     <div class="section-title">Audit log</div>${audit.slice(0, 40).map((a) => `<div class="kv"><span>${esc(a.action)} · ${esc(a.target_type || '')}</span><span class="subtle">${new Date(a.created_at).toLocaleString()}</span></div>`).join('')}</div>`;
 };
 forms.resolve = async (f, ev) => {
   f.dataset.action = ev.submitter?.dataset.action || 'dismiss'; await api.post(`/api/admin/reports/${f.dataset.id}/resolve`, { action: f.dataset.action, note: f.elements.note.value }); toast('Done: ' + f.dataset.action); route(); };
+forms.ageDecide = async (f, ev) => { const d = ev.submitter?.dataset.d || 'failed'; await api.post(`/api/admin/age-reviews/${f.dataset.id}/decide`, { decision: d, note: f.elements.note.value }); toast('Age decision saved'); route(); };
 actions.decideAppeal = async (b) => { await api.post(`/api/admin/appeals/${b.dataset.id}/decide`, { decision: b.dataset.d }); toast('Appeal ' + b.dataset.d); route(); };
 actions.verifyBiz = async (b) => { await api.post(`/api/admin/businesses/${b.dataset.id}/verify`, { decision: b.dataset.d }); toast('Business ' + b.dataset.d); route(); };

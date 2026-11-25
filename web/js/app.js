@@ -81,7 +81,8 @@ screens.verify = async (el) => {
 forms.ageStart = async (f) => {
   const r = await api.post('/api/age/start', { method: formData(f).method });
   state.me.ageStatus = 'pending';
-  location.hash = r.redirectUrl.replace(/^\/?#/, '');
+  if (/^https:\/\//.test(r.redirectUrl)) location.href = r.redirectUrl; // the provider's hosted check
+  else location.hash = r.redirectUrl.replace(/^\/?#/, '');
 };
 
 screens['age-test'] = (el, checkId) => {

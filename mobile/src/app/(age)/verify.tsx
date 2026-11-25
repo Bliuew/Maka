@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { AppState } from 'react-native';
 import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import { Banner, Button, Choice, Loading, P, Screen, useLoad } from '../../components/ui';
@@ -14,11 +15,22 @@ export default function Verify() {
   const toast = useToast();
   const { data, error, reload } = useLoad(() => api.get<{ isTestMode: boolean; methods: Method[]; threshold: number }>('/api/age/methods'));
   const [method, setMethod] = useState<string>('');
+  // Coming back from the provider's page: pick up the result without a manual refresh.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (s) => { if (s === 'active') refreshMe().catch(() => {}); });
+    return () => sub.remove();
+  }, [refreshMe]);
+  const waiting = me?.ageStatus === 'pending' && data && !data.isTestMode;
+  useEffect(() => {
+    if (!waiting) return;
+    const t = setInterval(() => refreshMe().catch(() => {}), 10000);
+    return () => clearInterval(t);
+  }, [waiting, refreshMe]);
   if (!data) return <Loading error={error} onRetry={reload} />;
   const chosen = method || data.methods[0]?.id;
   const st = me?.ageStatus;
   const msg = ({
-    pending: 'You started a check. You can continue it or choose another method.',
+    pending: 'You started a check. Finish it on the page that opened; this screen updates when the result arrives, usually within a few minutes. You can also start again.',
     failed: 'That check didn’t complete. You can try again or pick another method.',
     review: 'Your verification is under review by our team. We’ll notify you when it’s done.',
   } as Record<string, string>)[st || ''];
